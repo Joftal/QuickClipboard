@@ -6,7 +6,7 @@ use clipboard_rs::{
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{self, Receiver, SyncSender};
+use std::sync::mpsc::{self, Receiver, Sender};
 use parking_lot::Mutex;
 use once_cell::sync::Lazy;
 use std::thread;
@@ -16,14 +16,12 @@ static IS_RUNNING: AtomicBool = AtomicBool::new(false);
 static GENERATION: AtomicU64 = AtomicU64::new(0);
 static MONITOR_LIFECYCLE_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
-const CLIPBOARD_WORK_QUEUE_CAPACITY: usize = 16;
-
 // 监听器状态
 struct MonitorState {
     watcher_handle: Option<thread::JoinHandle<()>>,
     watcher_shutdown: Option<WatcherShutdown>,
     worker_handle: Option<thread::JoinHandle<()>>,
-    work_sender: Option<SyncSender<Vec<ClipboardContent>>>,
+    work_sender: Option<Sender<ClipboardWorkItem>>,
 }
 
 static MONITOR_STATE: Lazy<Arc<Mutex<MonitorState>>> = Lazy::new(|| {
@@ -49,6 +47,11 @@ pub fn clear_last_content_cache() {
 // 剪贴板监听管理器
 struct ClipboardMonitorManager {
     generation: u64,
+}
+
+struct ClipboardWorkItem {
+    contents: Vec<ClipboardContent>,
+    hashes: Vec<String>,
 }
 
 impl ClipboardMonitorManager {
@@ -129,38 +132,48 @@ fn create_clipboard_watcher(
     Ok((watcher, watcher_shutdown))
 }
 
-fn start_clipboard_worker() -> (SyncSender<Vec<ClipboardContent>>, thread::JoinHandle<()>) {
-    let (sender, receiver) = mpsc::sync_channel(CLIPBOARD_WORK_QUEUE_CAPACITY);
+fn start_clipboard_worker() -> (Sender<ClipboardWorkItem>, thread::JoinHandle<()>) {
+    let (sender, receiver) = mpsc::channel();
     let handle = thread::spawn(move || run_clipboard_worker(receiver));
     (sender, handle)
 }
 
-fn run_clipboard_worker(receiver: Receiver<Vec<ClipboardContent>>) {
-    while let Ok(contents) = receiver.recv() {
-        process_clipboard_contents(contents);
+fn run_clipboard_worker(receiver: Receiver<ClipboardWorkItem>) {
+    while let Ok(work_item) = receiver.recv() {
+        process_clipboard_contents(work_item);
     }
 }
 
-fn process_clipboard_contents(contents: Vec<ClipboardContent>) {
+fn process_clipboard_contents(work_item: ClipboardWorkItem) {
     let mut any_stored = false;
+    let mut retained_hashes = Vec::with_capacity(work_item.hashes.len());
 
-    for content in contents {
+    for content in work_item.contents {
+        let content_hash = content.calculate_hash();
+
         match process_content(content) {
             Ok(processed) => match store_clipboard_item(processed) {
-                Ok(_) => any_stored = true,
-                Err(e) if e.contains("重复内容") || e.contains("已禁止保存图片") => {}
+                Ok(_) => {
+                    any_stored = true;
+                    retained_hashes.push(content_hash);
+                }
+                Err(e) if e.contains("重复内容") || e.contains("已禁止保存图片") => {
+                    retained_hashes.push(content_hash);
+                }
                 Err(e) => eprintln!("存储剪贴板内容失败: {}", e),
             },
             Err(e) => eprintln!("处理剪贴板内容失败: {}", e),
         }
     }
 
+    reconcile_last_content_hashes(&work_item.hashes, retained_hashes);
+
     if any_stored {
         let _ = emit_clipboard_updated();
     }
 }
 
-fn enqueue_clipboard_contents(contents: Vec<ClipboardContent>) -> Result<(), String> {
+fn enqueue_clipboard_contents(contents: Vec<ClipboardContent>, hashes: Vec<String>) -> Result<(), String> {
     let sender = {
         let state = MONITOR_STATE.lock();
         state.work_sender.clone()
@@ -171,8 +184,15 @@ fn enqueue_clipboard_contents(contents: Vec<ClipboardContent>) -> Result<(), Str
     };
 
     sender
-        .send(contents)
-        .map_err(|_| "剪贴板工作线程已停止".to_string())
+        .send(ClipboardWorkItem {
+            contents,
+            hashes: hashes.clone(),
+        })
+        .map_err(|_| "剪贴板工作线程已停止".to_string())?;
+
+    set_last_content_hashes(hashes);
+
+    Ok(())
 }
 
 fn stop_clipboard_monitor_inner() {
@@ -256,18 +276,28 @@ fn handle_clipboard_change() -> Result<(), String> {
             .collect()
     };
 
-    {
-        let mut last_hashes = LAST_CONTENT_HASHES.lock();
-        *last_hashes = current_hashes;
-    }
-
     if new_contents.is_empty() {
         return Ok(());
     }
 
-    enqueue_clipboard_contents(new_contents)?;
+    enqueue_clipboard_contents(new_contents, current_hashes)?;
 
     Ok(())
+}
+
+fn set_last_content_hashes(hashes: Vec<String>) {
+    let mut last_hashes = LAST_CONTENT_HASHES.lock();
+    *last_hashes = hashes;
+}
+
+fn reconcile_last_content_hashes(expected_hashes: &[String], retained_hashes: Vec<String>) {
+    let mut last_hashes = LAST_CONTENT_HASHES.lock();
+
+    if last_hashes.as_slice() != expected_hashes {
+        return;
+    }
+
+    *last_hashes = retained_hashes;
 }
 
 static APP_HANDLE: Lazy<Arc<Mutex<Option<tauri::AppHandle>>>> = Lazy::new(|| {
@@ -301,8 +331,7 @@ pub fn set_last_hash_text(text: &str) {
     hasher.update(text.as_bytes());
     let hash = format!("{:x}", hasher.finalize());
     
-    let mut last_hashes = LAST_CONTENT_HASHES.lock();
-    *last_hashes = vec![hash];
+    set_last_content_hashes(vec![hash]);
 }
 
 // 预设哈希缓存（文件类型）
@@ -323,8 +352,7 @@ pub fn set_last_hash_files(content: &str) {
             }
             
             let hash = format!("{:x}", hasher.finalize());
-            let mut last_hashes = LAST_CONTENT_HASHES.lock();
-            *last_hashes = vec![hash];
+            set_last_content_hashes(vec![hash]);
         }
     }
 }
@@ -338,7 +366,54 @@ pub fn set_last_hash_file(file_path: &str) {
     hasher.update(normalized.as_bytes());
     
     let hash = format!("{:x}", hasher.finalize());
-    let mut last_hashes = LAST_CONTENT_HASHES.lock();
-    *last_hashes = vec![hash];
+    set_last_content_hashes(vec![hash]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::clipboard::capture::ContentType;
+
+    fn text_content(text: &str) -> ClipboardContent {
+        ClipboardContent {
+            content_type: ContentType::Text,
+            text: Some(text.to_string()),
+            html: None,
+            files: None,
+        }
+    }
+
+    #[test]
+    fn reconcile_removes_failed_hashes_when_snapshot_matches() {
+        clear_last_content_cache();
+
+        let first = text_content("first");
+        let second = text_content("second");
+        let expected_hashes = vec![first.calculate_hash(), second.calculate_hash()];
+
+        set_last_content_hashes(expected_hashes.clone());
+        reconcile_last_content_hashes(&expected_hashes, vec![expected_hashes[0].clone()]);
+
+        let last_hashes = LAST_CONTENT_HASHES.lock().clone();
+        assert_eq!(last_hashes, vec![expected_hashes[0].clone()]);
+
+        clear_last_content_cache();
+    }
+
+    #[test]
+    fn reconcile_does_not_override_newer_snapshot() {
+        clear_last_content_cache();
+
+        let original = vec![text_content("old").calculate_hash()];
+        let newer = vec![text_content("new").calculate_hash()];
+
+        set_last_content_hashes(newer.clone());
+        reconcile_last_content_hashes(&original, Vec::new());
+
+        let last_hashes = LAST_CONTENT_HASHES.lock().clone();
+        assert_eq!(last_hashes, newer);
+
+        clear_last_content_cache();
+    }
 }
 

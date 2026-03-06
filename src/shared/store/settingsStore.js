@@ -33,11 +33,16 @@ export const settingsStore = proxy({
   
   // 保存单个设置项
   async saveSetting(key, value, options = {}) {
+    const previousValue = this[key]
     this[key] = value
     
     // 收集当前所有设置
     const currentSettings = this.getAllSettings()
     const result = await saveSettingsToBackend(currentSettings, options)
+
+    if (!result.success && Object.is(this[key], value)) {
+      this[key] = previousValue
+    }
     
     return result
   },

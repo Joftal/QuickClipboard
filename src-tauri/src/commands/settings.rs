@@ -1,5 +1,5 @@
 use crate::services::{AppSettings, get_settings, update_settings};
-use crate::services::settings::storage::SettingsStorage;
+use crate::services::settings::{replace_settings, storage::SettingsStorage};
 use tauri::Manager;
 use serde_json::Value;
 
@@ -17,55 +17,73 @@ fn handle_disable_edge_hide(app: &tauri::AppHandle) {
     }
 }
 
+fn sync_runtime_settings(
+    previous_settings: &AppSettings,
+    next_settings: &AppSettings,
+    app: &tauri::AppHandle,
+) -> Result<(), String> {
+    let clipboard_monitor_changed = previous_settings.clipboard_monitor != next_settings.clipboard_monitor;
+    let edge_hide_changed = previous_settings.edge_hide_enabled != next_settings.edge_hide_enabled;
+    let quickpaste_enabled_changed = previous_settings.quickpaste_enabled != next_settings.quickpaste_enabled;
+
+    crate::hotkey::reload_from_settings()?;
+
+    if clipboard_monitor_changed {
+        if next_settings.clipboard_monitor {
+            crate::start_clipboard_monitor()?;
+        } else {
+            crate::stop_clipboard_monitor()?;
+        }
+
+        use tauri::Emitter;
+        let _ = app.emit("settings-changed", serde_json::json!({
+            "clipboardMonitor": next_settings.clipboard_monitor
+        }));
+    }
+
+    if quickpaste_enabled_changed {
+        if next_settings.quickpaste_enabled {
+            crate::quickpaste::init_quickpaste_window(app)?;
+        } else if let Some(window) = app.get_webview_window("quickpaste") {
+            window.close().map_err(|e| e.to_string())?;
+        }
+    }
+
+    if edge_hide_changed && !next_settings.edge_hide_enabled {
+        handle_disable_edge_hide(app);
+    }
+
+    Ok(())
+}
+
 // 重新加载设置
 #[tauri::command]
 pub fn reload_settings() -> Result<AppSettings, String> {
     let settings = SettingsStorage::load()?;
-    update_settings(settings.clone())?;
+    replace_settings(settings.clone());
     Ok(settings)
 }
 
 #[tauri::command]
 pub fn save_settings(mut settings: AppSettings, app: tauri::AppHandle) -> Result<(), String> {
     let old_settings = get_settings();
-    let clipboard_monitor_changed = old_settings.clipboard_monitor != settings.clipboard_monitor;
-    let edge_hide_changed = old_settings.edge_hide_enabled != settings.edge_hide_enabled;
-    let quickpaste_enabled_changed = old_settings.quickpaste_enabled != settings.quickpaste_enabled;
-    
-    if edge_hide_changed && !settings.edge_hide_enabled {
+
+    if old_settings.edge_hide_enabled != settings.edge_hide_enabled && !settings.edge_hide_enabled {
         settings.edge_snap_position = None;
-        handle_disable_edge_hide(&app);
     }
-    
+
     update_settings(settings.clone())?;
-    
-    if let Err(e) = crate::hotkey::reload_from_settings() {
-        eprintln!("重新加载快捷键失败: {}", e);
-    }
-    
-    if clipboard_monitor_changed {
-        if settings.clipboard_monitor {
-            crate::start_clipboard_monitor()?;
-        } else {
-            crate::stop_clipboard_monitor()?;
+
+    if let Err(error) = sync_runtime_settings(&old_settings, &settings, &app) {
+        if let Err(rollback_error) = update_settings(old_settings.clone()) {
+            return Err(format!("应用运行时设置失败: {}; 回滚设置失败: {}", error, rollback_error));
         }
-        
-        use tauri::Emitter;
-        let _ = app.emit("settings-changed", serde_json::json!({
-            "clipboardMonitor": settings.clipboard_monitor
-        }));
-    }
-    
-    if quickpaste_enabled_changed {
-        if settings.quickpaste_enabled {
-            let app_clone = app.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(100));
-                let _ = crate::quickpaste::init_quickpaste_window(&app_clone);
-            });
-        } else if let Some(window) = app.get_webview_window("quickpaste") {
-            let _ = window.close();
+
+        if let Err(runtime_rollback_error) = sync_runtime_settings(&settings, &old_settings, &app) {
+            eprintln!("回滚运行时设置失败: {}", runtime_rollback_error);
         }
+
+        return Err(error);
     }
 
     Ok(())
@@ -86,13 +104,17 @@ pub fn get_settings_cmd() -> AppSettings {
 pub fn set_edge_hide_enabled(enabled: bool, app: tauri::AppHandle) -> Result<(), String> {
     let mut settings = get_settings();
     settings.edge_hide_enabled = enabled;
-    
+
     if !enabled {
         settings.edge_snap_position = None;
+    }
+
+    update_settings(settings)?;
+
+    if !enabled {
         handle_disable_edge_hide(&app);
     }
-    
-    update_settings(settings)?;
+
     Ok(())
 }
 

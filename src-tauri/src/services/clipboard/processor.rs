@@ -338,14 +338,10 @@ fn try_save_image_from_url(src: &str) -> Option<String> {
 
 // 获取图片数据（网络或本地）
 fn fetch_image_data(src: &str) -> Result<Vec<u8>, String> {
-    let src = if src.starts_with("//") {
-        format!("https:{}", src)
-    } else {
-        src.to_string()
-    };
-    
-    if src.starts_with("http://") || src.starts_with("https://") {
-        fetch_remote_image(&src)
+    let src = normalize_image_source(src);
+
+    if is_remote_image_source(&src) {
+        Err(format!("已跳过远程图片抓取: {}", src))
     } else if src.starts_with("data:image/") {
         parse_data_url(&src)
     } else if src.starts_with("file://") {
@@ -359,28 +355,16 @@ fn fetch_image_data(src: &str) -> Result<Vec<u8>, String> {
     }
 }
 
-// 下载网络图片
-fn fetch_remote_image(url: &str) -> Result<Vec<u8>, String> {
-    use reqwest::blocking::Client;
-    use std::time::Duration;
-    
-    let client = Client::builder()
-        .timeout(Duration::from_secs(10))
-        .build()
-        .map_err(|e| format!("创建HTTP客户端失败: {}", e))?;
-    
-    let response = client.get(url)
-        .send()
-        .map_err(|e| format!("下载图片失败: {}", e))?;
-    
-    if !response.status().is_success() {
-        return Err(format!("下载图片失败: HTTP {}", response.status()));
+fn normalize_image_source(src: &str) -> String {
+    if src.starts_with("//") {
+        format!("https:{}", src)
+    } else {
+        src.to_string()
     }
-    
-    let bytes = response.bytes()
-        .map_err(|e| format!("读取图片数据失败: {}", e))?;
-    
-    Ok(bytes.to_vec())
+}
+
+fn is_remote_image_source(src: &str) -> bool {
+    src.starts_with("http://") || src.starts_with("https://")
 }
 
 // 解析Data URL
@@ -455,6 +439,34 @@ fn extract_image_id_from_path(path_str: &str) -> Option<String> {
         return p.file_stem().and_then(|s| s.to_str()).map(|s| s.to_string());
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_protocol_relative_image_source_to_https() {
+        assert_eq!(
+            normalize_image_source("//example.com/image.png"),
+            "https://example.com/image.png"
+        );
+    }
+
+    #[test]
+    fn detect_remote_image_source() {
+        assert!(is_remote_image_source("http://example.com/image.png"));
+        assert!(is_remote_image_source("https://example.com/image.png"));
+        assert!(!is_remote_image_source("file:///C:/image.png"));
+        assert!(!is_remote_image_source("data:image/png;base64,abcd"));
+        assert!(!is_remote_image_source("clipboard_images/test.png"));
+    }
+
+    #[test]
+    fn reject_remote_image_fetch_in_clipboard_path() {
+        let error = fetch_image_data("https://example.com/image.png").unwrap_err();
+        assert!(error.contains("已跳过远程图片抓取"));
+    }
 }
 
 
