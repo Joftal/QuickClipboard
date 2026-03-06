@@ -544,10 +544,6 @@
     "pasteShortcut": "Paste History"
   },
   "contextMenu": {
-    "openInBrowser": "Open in Browser",
-    "openLinks": "Open Links ({{count}})",
-    "openAll": "Open All",
-    "searchWith": "Search with {{engine}}",
     "copy": "Copy",
     "copied": "Copied",
     "pinToScreen": "Pin to Screen",
@@ -573,8 +569,6 @@
     "deleteItem": "Delete Item",
     "clearAll": "Clear Clipboard",
     "delete": "Delete",
-    "linkOpened": "Link opened",
-    "searchOpened": "Search opened",
     "imagePinned": "Image pinned to screen",
     "imageSaved": "Image saved",
     "textExtracted": "Text extracted and copied",
@@ -663,13 +657,10 @@
     "checkFailed": "Failed to check updates: {{msg}}",
     "downloading": "Downloading update...",
     "installedRestarting": "Update installed, restarting...",
-    "downloadFailed": "Failed to download or install the update. Please try again later or download the latest installer from GitHub.",
+    "downloadFailed": "Failed to download or install the update. Please try again later.",
     "latestVersion": "Latest version: {{version}}",
     "notes": "Release Notes",
-    "viewOnGithub": "View on GitHub",
-    "viewChangelog": "View Changelog",
     "loadingNotes": "Loading release notes...",
-    "viewInBrowser": "View in browser",
     "noNotes": "No release notes",
     "downloadAndInstall": "Download and Install",
     "later": "Later",
@@ -677,9 +668,8 @@
     "retry": "Retry",
     "exitApp": "Exit App",
     "updateFailed": "Update Failed",
-    "manualDownload": "Manual Download",
     "newVersionAvailable": "New version available",
     "portableNotice": "Portable Version Notice",
-    "portableNoAutoUpdate": "Portable/standalone version does not support auto-update. Please download the new version manually and replace the current file."
+    "portableNoAutoUpdate": "Portable/standalone version does not support auto-update."
   }
 }

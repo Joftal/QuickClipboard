@@ -545,10 +545,6 @@
     "pasteShortcut": "快速粘贴"
   },
   "contextMenu": {
-    "openInBrowser": "在浏览器中打开",
-    "openLinks": "打开链接 ({{count}}个)",
-    "openAll": "全部打开",
-    "searchWith": "在 {{engine}} 中搜索",
     "copy": "复制",
     "copied": "已复制",
     "pinToScreen": "贴到屏幕",
@@ -574,8 +570,6 @@
     "deleteItem": "删除当前项",
     "clearAll": "清空剪贴板",
     "delete": "删除",
-    "linkOpened": "链接已打开",
-    "searchOpened": "搜索已打开",
     "imagePinned": "图片已贴到屏幕",
     "imageSaved": "图片已保存",
     "textExtracted": "文本已提取并复制",
@@ -664,13 +658,10 @@
     "checkFailed": "检查更新失败：{{msg}}",
     "downloading": "正在下载更新...",
     "installedRestarting": "更新已安装，正在重启...",
-    "downloadFailed": "下载或安装更新时出错，请稍后重试，或前往 GitHub 手动下载最新版本。",
+    "downloadFailed": "下载或安装更新时出错，请稍后重试。",
     "latestVersion": "最新版本：{{version}}",
     "notes": "更新内容",
-    "viewOnGithub": "在 GitHub 查看发布",
-    "viewChangelog": "查看更新日志",
     "loadingNotes": "正在加载更新说明...",
-    "viewInBrowser": "在浏览器查看",
     "noNotes": "暂无更新说明",
     "downloadAndInstall": "下载并安装",
     "later": "稍后",
@@ -678,9 +669,8 @@
     "retry": "重试",
     "exitApp": "退出程序",
     "updateFailed": "更新失败",
-    "manualDownload": "手动下载",
     "newVersionAvailable": "发现新版本",
     "portableNotice": "便携版提示",
-    "portableNoAutoUpdate": "便携版/绿色版不支持自动更新，请手动下载新版本替换当前文件。"
+    "portableNoAutoUpdate": "便携版/绿色版不支持自动更新。"
   }
 }

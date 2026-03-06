@@ -7,14 +7,12 @@ import { check } from '@tauri-apps/plugin-updater'
 import { getVersion } from '@tauri-apps/api/app'
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { createRoot } from 'react-dom/client'
-import { openUrl } from '@tauri-apps/plugin-opener'
 import '@shared/i18n';
 import { useTranslation } from 'react-i18next'
 import '@shared/styles/index.css'
 import { initStores } from '@shared/store'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import logoIcon from '@/assets/icon1024.png';
-import appLinks from '@shared/config/appLinks.json';
 function App() {
   const { t, i18n } = useTranslation()
   const [forceUpdate, setForceUpdate] = useState(false)
@@ -169,12 +167,6 @@ function App() {
     }
   }, [forceUpdate])
 
-  const handleViewChangelog = useCallback(async () => {
-    try {
-      await openUrl(appLinks.changelog)
-    } catch (_) {}
-  }, [])
-
   const pct = progress.total > 0 ? Math.min(100, Math.round(progress.downloaded * 100 / progress.total)) : 0
 
   return (
@@ -202,9 +194,6 @@ function App() {
           ) : null}
         </div>
 
-        <button onClick={handleViewChangelog} className="text-xs text-blue-600 hover:underline" type="button">
-          {t('updater.viewChangelog', { defaultValue: '查看更新日志' })}
-        </button>
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto mt-2 pr-1" data-tauri-drag-region>
@@ -240,14 +229,6 @@ function App() {
                 <div className="text-xs mt-1 text-red-600 dark:text-red-400" data-tauri-drag-region>
                   {message}
                 </div>
-                <a 
-                  className="text-xs mt-2 inline-block text-blue-600 hover:underline" 
-                  href={appLinks.releasesLatest} 
-                  target="_blank" 
-                  rel="noreferrer"
-                >
-                  {t('updater.manualDownload', { defaultValue: '手动下载' })}
-                </a>
               </div>
             )}
           </div>
@@ -264,14 +245,9 @@ function App() {
           {status === 'available' && (
             <>
               {isPortable ? (
-                <a 
-                  href={appLinks.releasesLatest} 
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="px-3 py-2 rounded bg-blue-600 text-white text-sm flex items-center gap-2 no-underline"
-                >
-                  <i className="ti ti-external-link" /> {t('updater.manualDownload', { defaultValue: '手动下载' })}
-                </a>
+                <button onClick={handleClose} className="px-3 py-2 rounded bg-gray-200 dark:bg-gray-700 text-sm">
+                  {t('common.close', { defaultValue: '关闭' })}
+                </button>
               ) : (
                 <button onClick={() => startDownload()} className="px-3 py-2 rounded bg-blue-600 text-white text-sm flex items-center gap-2">
                   <i className="ti ti-download" /> {t('updater.downloadAndInstall', { defaultValue: '下载并安装' })}

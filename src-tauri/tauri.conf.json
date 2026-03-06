@@ -40,7 +40,6 @@
         "default",
         "settings",
         "quickpaste",
-        "community",
         "text-editor",
         "pin-image",
         "input-dialog",
@@ -64,7 +63,6 @@
       "app"
     ],
     "publisher": "MoSheng",
-    "homepage": "https://github.com/mosheng1/QuickClipboard",
     "copyright": "Copyright © 2025 MoSheng. All rights reserved.",
     "icon": [
       "icons/icon32.png",

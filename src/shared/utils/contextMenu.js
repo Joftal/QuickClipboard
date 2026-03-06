@@ -1,8 +1,7 @@
 // 右键菜单工具函数
 import { showContextMenuFromEvent, createMenuItem, createSeparator } from '@/plugins/context_menu/index.js'
-import { openUrl, openPath } from '@tauri-apps/plugin-opener'
+import { openPath } from '@tauri-apps/plugin-opener'
 import i18n from '@shared/i18n'
-import { extractAllLinks, normalizeUrl } from './linkUtils'
 import { getPrimaryType } from './contentType'
 import { settingsStore } from '@shared/store/settingsStore'
 import { toast, toastStore, TOAST_SIZES, TOAST_POSITIONS } from '@shared/store/toastStore'
@@ -24,123 +23,6 @@ import { clipboardStore } from '@shared/store/clipboardStore'
 const TOAST_CONFIG = {
   size: TOAST_SIZES.EXTRA_SMALL,
   position: TOAST_POSITIONS.BOTTOM_RIGHT
-}
-
-// 获取搜索引擎列表
-function getSearchEngines() {
-  return [
-    { id: 'bing', name: 'Bing', favicon: 'https://www.bing.com/favicon.ico', url: 'https://www.bing.com/search?q=' },
-    { id: 'baidu', name: '百度', favicon: 'https://www.baidu.com/favicon.ico', url: 'https://www.baidu.com/s?wd=' },
-    { id: 'google', name: 'Google', favicon: 'https://www.google.com/favicon.ico', url: 'https://www.google.com/search?q=' }
-  ]
-}
-
-// 获取当前搜索引擎
-function getCurrentSearchEngine() {
-  const engines = getSearchEngines()
-  const savedEngineId = localStorage.getItem('current-search-engine')
-  return engines.find(e => e.id === savedEngineId) || engines.find(e => e.id === 'bing') || engines[0]
-}
-
-// 设置当前搜索引擎
-function setCurrentSearchEngine(engineId) {
-  localStorage.setItem('current-search-engine', engineId)
-}
-
-// 在浏览器中搜索文本
-async function searchTextInBrowser(text, engineId = null) {
-  try {
-    const engine = engineId
-      ? getSearchEngines().find(e => e.id === engineId)
-      : getCurrentSearchEngine()
-
-    if (!engine) return
-
-    const url = engine.url + encodeURIComponent(text)
-    await openUrl(url)
-
-    if (engineId) {
-      setCurrentSearchEngine(engineId)
-    }
-  } catch (error) {
-    console.error('搜索失败:', error)
-  }
-}
-
-// 打开链接
-async function openLink(url) {
-  try {
-    const normalizedUrl = normalizeUrl(url)
-    await openUrl(normalizedUrl)
-  } catch (error) {
-    console.error('打开链接失败:', error)
-  }
-}
-
-// 创建链接菜单项
-function createLinkMenuItems(item) {
-  const links = extractAllLinks({
-    content: item.content,
-    html_content: item.html_content
-  })
-
-  if (links.length === 0) return { menuItems: [], links }
-
-  const menuItems = []
-
-  if (links.length === 1) {
-    menuItems.push(
-      createMenuItem('open-link', i18n.t('contextMenu.openInBrowser'), { icon: 'ti ti-external-link' })
-    )
-  } else {
-    const linkMenuItem = createMenuItem(
-      'open-links',
-      i18n.t('contextMenu.openLinks', { count: links.length }),
-      { icon: 'ti ti-external-link' }
-    )
-
-    linkMenuItem.children = [
-      ...links.map((link, idx) => {
-        const displayText = link.length > 50 ? link.substring(0, 50) + '...' : link
-        return createMenuItem(`open-link-${idx}`, displayText, { icon: 'ti ti-link' })
-      }),
-      createSeparator(),
-      createMenuItem('open-all-links', i18n.t('contextMenu.openAll'), { icon: 'ti ti-external-link' })
-    ]
-
-    menuItems.push(linkMenuItem)
-  }
-
-  return { menuItems, links }
-}
-
-// 创建搜索菜单项
-function createSearchMenuItems(plainText, contentType) {
-  if (!plainText || contentType.includes('image') || contentType.includes('file')) {
-    return []
-  }
-
-  const searchEngines = getSearchEngines()
-  const currentEngine = getCurrentSearchEngine()
-
-  if (!currentEngine || searchEngines.length === 0) {
-    return []
-  }
-
-  const searchMenuItem = createMenuItem(
-    'search-current',
-    i18n.t('contextMenu.searchWith', { engine: currentEngine.name }),
-    { favicon: currentEngine.favicon }
-  )
-
-  searchMenuItem.children = searchEngines.map(engine =>
-    createMenuItem(`search-${engine.id}`, engine.name, {
-      favicon: engine.favicon,
-      icon: engine.id === currentEngine.id ? 'ti ti-check' : undefined
-    })
-  )
-
-  return [searchMenuItem]
 }
 
 // 创建粘贴菜单项
@@ -181,48 +63,6 @@ function createContentTypeMenuItems(contentType) {
   return [
     createMenuItem('edit-text', isRichText ? i18n.t('contextMenu.editPlainText') : i18n.t('contextMenu.editText'), { icon: 'ti ti-edit' })
   ]
-}
-
-// 处理链接相关操作
-async function handleLinkActions(result, links) {
-  if (result === 'open-link' && links.length === 1) {
-    await openLink(links[0])
-    return true
-  }
-
-  if (result.startsWith('open-link-')) {
-    const linkIndex = parseInt(result.substring(10))
-    if (linkIndex >= 0 && linkIndex < links.length) {
-      await openLink(links[linkIndex])
-    }
-    return true
-  }
-
-  if (result === 'open-all-links') {
-    for (const link of links) {
-      await openLink(link)
-      await new Promise(resolve => setTimeout(resolve, 100))
-    }
-    return true
-  }
-
-  return false
-}
-
-// 处理搜索相关操作
-async function handleSearchActions(result, plainText) {
-  if (result === 'search-current') {
-    await searchTextInBrowser(plainText)
-    return true
-  }
-
-  if (result.startsWith('search-')) {
-    const engineId = result.substring(7)
-    await searchTextInBrowser(plainText, engineId)
-    return true
-  }
-
-  return false
 }
 
 // 处理粘贴操作
@@ -356,22 +196,11 @@ async function handleContentTypeActions(result, item, index) {
 export async function showClipboardItemContextMenu(event, item, index) {
   const menuItems = []
   const contentType = item.content_type || 'text'
-  const plainText = typeof item.content === 'string' ? item.content.trim() : ''
 
   const pasteMenuItem = createPasteMenuItem(contentType, !!item.html_content)
   menuItems.push(pasteMenuItem)
   menuItems.push(createMenuItem('copy-item', i18n.t('contextMenu.copy'), { icon: 'ti ti-copy' }))
   menuItems.push(createSeparator())
-
-  const { menuItems: linkMenuItems, links } = createLinkMenuItems(item)
-  if (linkMenuItems.length > 0) {
-    menuItems.push(...linkMenuItems, createSeparator())
-  }
-
-  const searchMenuItems = createSearchMenuItems(plainText, contentType)
-  if (searchMenuItems.length > 0) {
-    menuItems.push(...searchMenuItems, createSeparator())
-  }
 
   const contentMenuItems = createContentTypeMenuItems(contentType)
   if (contentMenuItems.length > 0) {
@@ -420,18 +249,6 @@ export async function showClipboardItemContextMenu(event, item, index) {
 
     // 处理粘贴操作
     if (await handlePasteActions(result, item, true, index)) return
-
-    // 处理链接操作
-    if (await handleLinkActions(result, links)) {
-      toast.success(i18n.t('contextMenu.linkOpened'), TOAST_CONFIG)
-      return
-    }
-
-    // 处理搜索操作
-    if (await handleSearchActions(result, plainText)) {
-      toast.success(i18n.t('contextMenu.searchOpened'), TOAST_CONFIG)
-      return
-    }
 
     // 处理添加到收藏
     if (result.startsWith('add-to-group-')) {
@@ -488,12 +305,6 @@ export async function showFavoriteItemContextMenu(event, item, index) {
   menuItems.push(createMenuItem('copy-item', i18n.t('contextMenu.copy'), { icon: 'ti ti-copy' }))
   menuItems.push(createSeparator())
 
-  // 添加链接菜单
-  const { menuItems: linkMenuItems, links } = createLinkMenuItems(item)
-  if (linkMenuItems.length > 0) {
-    menuItems.push(...linkMenuItems, createSeparator())
-  }
-
 
   // 添加内容类型特定菜单项（图片、文件等）
   const contentMenuItems = createContentTypeMenuItems(contentType)
@@ -539,11 +350,6 @@ export async function showFavoriteItemContextMenu(event, item, index) {
 
     // 处理粘贴操作
     if (await handlePasteActions(result, item, false, index)) return
-
-    if (await handleLinkActions(result, links)) {
-      toast.success(i18n.t('contextMenu.linkOpened'), TOAST_CONFIG)
-      return
-    }
 
     if (result === 'edit-text') {
       const { openEditorForFavorite } = await import('@shared/api/textEditor')
