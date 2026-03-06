@@ -1,6 +1,7 @@
 use super::capture::{ClipboardContent, ContentType as CaptureType};
 use super::content_type::ContentType;
 use image::ImageFormat;
+use once_cell::sync::Lazy;
 use std::io::Cursor;
 use std::fs;
 use std::path::Path;
@@ -8,6 +9,20 @@ use regex::Regex;
 use sha2::{Sha256, Digest};
 use serde::{Serialize, Deserialize};
 use crate::utils::cf_html::normalize_clipboard_html;
+
+static URL_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(?i)\b(https?://|ftp://|www\.)[^\s<>"]+\b"#).unwrap()
+});
+
+static HTML_TAG_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"<[^>]*>").unwrap());
+static HTML_ENTITY_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"&[a-zA-Z]+;").unwrap());
+static HTML_WHITESPACE_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
+static IMG_SRC_DOUBLE_QUOTE_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(<img\b[^>]*?\bsrc\s*=\s*")([^"]+)(")"#).unwrap()
+});
+static IMG_SRC_SINGLE_QUOTE_REGEX: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"(<img\b[^>]*?\bsrc\s*=\s*')([^']+)(')"#).unwrap()
+});
 
 
 // 文件信息结构
@@ -245,32 +260,24 @@ fn is_url(text: &str) -> bool {
 
 // 检测文本中是否包含链接
 fn contains_links(text: &str) -> bool {
-    let url_regex = Regex::new(r#"(?i)\b(https?://|ftp://|www\.)[^\s<>"]+\b"#).unwrap();
-    url_regex.is_match(text)
+    URL_REGEX.is_match(text)
 }
 
 // 从HTML中提取纯文本
 fn strip_html(html: &str) -> String {
-    let tag_regex = Regex::new(r"<[^>]*>").unwrap();
-    let entity_regex = Regex::new(r"&[a-zA-Z]+;").unwrap();
-    
-    let mut text = tag_regex.replace_all(html, " ").to_string();
-    text = entity_regex.replace_all(&text, " ").to_string();
+    let mut text = HTML_TAG_REGEX.replace_all(html, " ").to_string();
+    text = HTML_ENTITY_REGEX.replace_all(&text, " ").to_string();
     
     // 清理多余的空白
-    let whitespace_regex = Regex::new(r"\s+").unwrap();
-    whitespace_regex.replace_all(&text, " ").trim().to_string()
+    HTML_WHITESPACE_REGEX.replace_all(&text, " ").trim().to_string()
 }
 
 // 处理HTML中的图片
 fn process_html_images(html: &str) -> Result<(String, Vec<String>), String> {
-    use regex::Regex;
-    
     let mut processed_html = html.to_string();
     let mut image_ids = Vec::new();
-    
-    if let Ok(re) = Regex::new(r#"(<img\b[^>]*?\bsrc\s*=\s*")([^"]+)(")"#) {
-        processed_html = re.replace_all(&processed_html, |caps: &regex::Captures| {
+
+    processed_html = IMG_SRC_DOUBLE_QUOTE_REGEX.replace_all(&processed_html, |caps: &regex::Captures| {
             let full_tag = &caps[0];
             let src = &caps[2];
             
@@ -286,10 +293,8 @@ fn process_html_images(html: &str) -> Result<(String, Vec<String>), String> {
                 full_tag.to_string()
             }
         }).to_string();
-    }
-    
-    if let Ok(re) = Regex::new(r#"(<img\b[^>]*?\bsrc\s*=\s*')([^']+)(')"#) {
-        processed_html = re.replace_all(&processed_html, |caps: &regex::Captures| {
+
+    processed_html = IMG_SRC_SINGLE_QUOTE_REGEX.replace_all(&processed_html, |caps: &regex::Captures| {
             let full_tag = &caps[0];
             let src = &caps[2];
             
@@ -306,7 +311,6 @@ fn process_html_images(html: &str) -> Result<(String, Vec<String>), String> {
                 full_tag.to_string()
             }
         }).to_string();
-    }
     
     Ok((processed_html, image_ids))
 }
