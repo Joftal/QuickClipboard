@@ -188,7 +188,7 @@ pub fn get_auto_start_status(app: tauri::AppHandle) -> Result<bool, String> {
         use tauri_plugin_autostart::ManagerExt;
         
         let autostart_manager = app.autolaunch();
-        return autostart_manager.is_enabled().map_err(|e| e.to_string());
+        autostart_manager.is_enabled().map_err(|e| e.to_string())
     }
     
     #[cfg(not(desktop))]

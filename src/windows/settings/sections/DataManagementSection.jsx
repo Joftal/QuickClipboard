@@ -13,6 +13,7 @@ import { reloadAllWindows } from '@shared/api/window';
 import { resetSettingsToDefault } from '@shared/api/settings';
 import { isPortableMode } from '@shared/api/system';
 import { clearClipboardHistory } from '@shared/api/clipboard';
+import { clearLocalStorageForAppReset, clearLocalStorageForSettingsReset } from '@shared/utils/localStorageCleanup';
 function DataManagementSection() {
   const {
     t
@@ -37,9 +38,9 @@ function DataManagementSection() {
     }
   }
 
-  const clearLocalStorageSafely = (action) => {
+  const runLocalStorageCleanupSafely = (action, cleanup) => {
     try {
-      window.localStorage?.clear?.()
+      cleanup(window.localStorage)
     } catch (error) {
       warnNonCriticalError(action, error)
     }
@@ -268,7 +269,7 @@ function DataManagementSection() {
       setBusyText(t('settings.dataManagement.overlayResetSettings') || t('settings.dataManagement.overlayMigrating'));
       setBusy(true);
       await resetSettingsToDefault();
-      clearLocalStorageSafely('重置设置时清理本地缓存')
+      runLocalStorageCleanupSafely('重置设置时清理本地缓存', clearLocalStorageForSettingsReset)
       await showMessage(t('settings.dataManagement.resetSettingsSuccess') || t('common.success'));
       await reloadAllWindowsSafely('重置设置后刷新窗口')
     } catch (e) {
@@ -286,7 +287,7 @@ function DataManagementSection() {
       setBusyText(t('settings.dataManagement.overlayResetAll') || t('settings.dataManagement.overlayMigrating'));
       setBusy(true);
       const dir = await resetAllData();
-      clearLocalStorageSafely('重置全部数据时清理本地缓存')
+      runLocalStorageCleanupSafely('重置全部数据时清理本地缓存', clearLocalStorageForAppReset)
       const latest = await getCurrentStoragePath();
       setStoragePath(latest);
       await showMessage(t('settings.dataManagement.resetAllSuccess', { path: dir }) || t('common.success'));

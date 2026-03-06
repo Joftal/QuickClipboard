@@ -1,7 +1,7 @@
 import { useRef, forwardRef, useImperativeHandle, useEffect, useState, useCallback } from 'react';
 import { useSnapshot } from 'valtio';
 import { listen } from '@tauri-apps/api/event';
-import { clipboardStore, refreshClipboardHistory } from '@shared/store/clipboardStore';
+import { clipboardStore, updateClipboardView } from '@shared/store/clipboardStore';
 import { navigationStore } from '@shared/store/navigationStore';
 import { settingsStore } from '@shared/store/settingsStore';
 import ClipboardList from './ClipboardList';
@@ -25,8 +25,10 @@ const ClipboardTab = forwardRef(({
     }
 
     searchDebounceRef.current = setTimeout(() => {
-      clipboardStore.setFilter(query);
-      refreshClipboardHistory();
+      updateClipboardView({
+        filter: query,
+        contentType: contentFilter,
+      });
       if (query) {
         navigationStore.setSelectedIndex(0);
       } else {
@@ -36,7 +38,6 @@ const ClipboardTab = forwardRef(({
   }, []);
 
   useEffect(() => {
-    clipboardStore.setContentType(contentFilter);
     debouncedSearch(searchQuery, contentFilter);
 
     return () => {

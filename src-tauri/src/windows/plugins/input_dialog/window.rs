@@ -3,17 +3,12 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, WebviewWindowBuilder};
 
 // 输入框类型
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InputType {
+    #[default]
     Text,
     Number,
-}
-
-impl Default for InputType {
-    fn default() -> Self {
-        InputType::Text
-    }
 }
 
 // 输入对话框的配置

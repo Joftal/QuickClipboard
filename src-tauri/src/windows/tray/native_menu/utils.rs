@@ -112,7 +112,7 @@ pub fn format_item_label(item: &crate::services::database::ClipboardItem) -> Str
             } else {
                 let filename = item.content
                     .split(['/', '\\'])
-                    .last()
+                    .next_back()
                     .unwrap_or("文件");
                 truncate_content(filename, MAX_LABEL_LENGTH - 14)
             };

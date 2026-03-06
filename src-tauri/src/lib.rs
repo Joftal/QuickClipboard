@@ -42,17 +42,27 @@ pub fn run() {
         let is_installer_launch = args.iter().any(|a| a == "--installer-launch");
         let already_restarted = args.iter().any(|a| a == "--qc-restarted");
         if is_installer_launch && !already_restarted {
-            if let Ok(exe) = std::env::current_exe() {
-                let mut cmd = Command::new(exe);
-                for a in std::env::args().skip(1) {
-                    if a == "--installer-launch" {
-                        continue;
+            match std::env::current_exe() {
+                Ok(exe) => {
+                    let mut cmd = Command::new(exe);
+                    for a in std::env::args().skip(1) {
+                        if a == "--installer-launch" {
+                            continue;
+                        }
+                        cmd.arg(a);
                     }
-                    cmd.arg(a);
+                    cmd.arg("--qc-restarted");
+
+                    match cmd.spawn() {
+                        Ok(_) => std::process::exit(0),
+                        Err(error) => {
+                            eprintln!("安装器启动后的重启失败，将继续当前进程: {}", error);
+                        }
+                    }
                 }
-                cmd.arg("--qc-restarted");
-                let _ = cmd.spawn();
-                std::process::exit(0);
+                Err(error) => {
+                    eprintln!("获取当前可执行文件路径失败，将继续当前进程: {}", error);
+                }
             }
         }
 
@@ -62,10 +72,8 @@ pub fn run() {
                 
                 if is_admin {
                     let _ = services::system::create_scheduled_task();
-                } else {
-                    if services::system::elevate::try_elevate_and_restart() {
-                        std::process::exit(0);
-                    }
+                } else if services::system::elevate::try_elevate_and_restart() {
+                    std::process::exit(0);
                 }
             }
         }
@@ -90,7 +98,7 @@ pub fn run() {
         .plugin(tauri_plugin_drag::init())
         .plugin(tauri_plugin_store::Builder::new().build());
     
-    builder.invoke_handler(tauri::generate_handler![
+    let builder = builder.invoke_handler(tauri::generate_handler![
                 commands::start_custom_drag,
                 commands::hide_main_window,
                 commands::show_main_window,
@@ -270,7 +278,7 @@ pub fn run() {
                 windows::plugins::context_menu::init();
                 windows::plugins::input_dialog::init();
                 quickpaste::init_quickpaste_state();
-                let _ = quickpaste::init_quickpaste_window(&app.handle());
+                let _ = quickpaste::init_quickpaste_window(app.handle());
                 set_clipboard_app_handle(app.handle().clone());
 
                 windows::pin_image_window::init_pin_image_window();
@@ -287,10 +295,17 @@ pub fn run() {
                 services::memory::init();
 
             Ok(())
-        })
-        .build(tauri::generate_context!())
-        .expect("error while building tauri application")
-        .run(|app, event| {
+        });
+
+    let app = match builder.build(tauri::generate_context!()) {
+        Ok(app) => app,
+        Err(error) => {
+            eprintln!("构建 Tauri 应用失败: {}", error);
+            return;
+        }
+    };
+
+    app.run(|app, event| {
             match event {
                 tauri::RunEvent::ExitRequested { api, .. } => {
                     if services::low_memory::is_low_memory_mode() 

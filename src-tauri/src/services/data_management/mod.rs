@@ -261,9 +261,11 @@ pub fn reset_all_data() -> Result<String, String> {
     clean_dir(&current_dir)?;
     if current_dir != default_dir { clean_dir(&default_dir)?; }
 
-    let mut defaults = crate::services::AppSettings::default();
-    defaults.use_custom_storage = false;
-    defaults.custom_storage_path = None;
+    let defaults = crate::services::AppSettings {
+        use_custom_storage: false,
+        custom_storage_path: None,
+        ..crate::services::AppSettings::default()
+    };
     update_settings(defaults.clone())?;
 
     let db_path = default_dir.join("quickclipboard.db");

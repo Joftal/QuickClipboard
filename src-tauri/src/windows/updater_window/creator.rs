@@ -218,7 +218,7 @@ pub async fn check_updates_and_open_window(app: &AppHandle) -> Result<bool, Stri
                 if let Some(qp_window) = app.get_webview_window("quickpaste") {
                     let _ = qp_window.hide();
                 }
-                let _ = crate::hotkey::disable_hotkeys();
+                crate::hotkey::disable_hotkeys();
             }
             
             let window = if let Some(w) = app.get_webview_window("updater") {

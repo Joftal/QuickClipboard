@@ -68,9 +68,7 @@ pub fn process_content(content: ClipboardContent) -> Result<ProcessedContent, St
             
             let mut ct = ContentType::new("text");
             
-            if is_url(&text) {
-                ct.add_type("link");
-            } else if contains_links(&text) {
+            if is_url(&text) || contains_links(&text) {
                 ct.add_type("link");
             }
             
@@ -92,9 +90,7 @@ pub fn process_content(content: ClipboardContent) -> Result<ProcessedContent, St
                 
                 let mut ct = ContentType::new("rich_text");
             
-                if is_url(&text) {
-                    ct.add_type("link");
-                } else if contains_links(&text) {
+                if is_url(&text) || contains_links(&text) {
                     ct.add_type("link");
                 }
                 

@@ -3,7 +3,7 @@ import { listen } from '@tauri-apps/api/event'
 import i18n from '@shared/i18n'
 import { groupsStore } from './groupsStore'
 import { getToolState } from '@shared/services/toolActions'
-import { 
+import {
   getFavoritesHistory,
   getFavoritesTotalCount,
   deleteFavorite as apiDeleteFavorite,
@@ -11,16 +11,52 @@ import {
 } from '@shared/api/favorites'
 import { showConfirm } from '@shared/utils/dialog'
 
-listen('favorite-paste-count-updated', (event) => {
-  const id = event.payload
-  for (const key of Object.keys(favoritesStore.items)) {
-    const item = favoritesStore.items[key]
-    if (item && item.id === id) {
-      favoritesStore.items[key] = { ...item, paste_count: (item.paste_count || 0) + 1 }
-      break
-    }
+let favoritesStoreListenerDispose = null
+let favoritesStoreListenerInitPromise = null
+
+export async function initFavoritesStoreListeners() {
+  if (favoritesStoreListenerDispose) {
+    return
   }
-})
+
+  if (favoritesStoreListenerInitPromise) {
+    return favoritesStoreListenerInitPromise
+  }
+
+  favoritesStoreListenerInitPromise = listen('favorite-paste-count-updated', (event) => {
+    const id = event.payload
+    for (const key of Object.keys(favoritesStore.items)) {
+      const item = favoritesStore.items[key]
+      if (item && item.id === id) {
+        favoritesStore.items[key] = { ...item, paste_count: (item.paste_count || 0) + 1 }
+        break
+      }
+    }
+  }).then(unlisten => {
+    favoritesStoreListenerDispose = unlisten
+  }).catch(error => {
+    console.error('初始化收藏 store 监听失败:', error)
+    throw error
+  }).finally(() => {
+    favoritesStoreListenerInitPromise = null
+  })
+
+  return favoritesStoreListenerInitPromise
+}
+
+export function disposeFavoritesStoreListeners() {
+  if (!favoritesStoreListenerDispose) {
+    return
+  }
+
+  try {
+    favoritesStoreListenerDispose()
+  } catch (error) {
+    console.error('释放收藏 store 监听失败:', error)
+  } finally {
+    favoritesStoreListenerDispose = null
+  }
+}
 
 const CACHE_WINDOW_SIZE = 200  
 const CACHE_BUFFER = 100     
@@ -31,6 +67,7 @@ export const favoritesStore = proxy({
   totalCount: 0,
   filter: '',
   contentType: 'all',
+  requestGeneration: 0,
   selectedIds: new Set(),
   loading: false,
   error: null,
@@ -78,30 +115,36 @@ export const favoritesStore = proxy({
   hasItem(index) {
     return index in this.items
   },
-  
-  // 添加新项到开头（新收藏内容）
-  addItem(item) {
+
+  invalidateItemsCache() {
     this.items = {}
   },
-  
-  // 删除项
-  removeItem(id) {
-    this.items = {}
+
+  applyViewState({ filter = this.filter, contentType = this.contentType } = {}) {
+    let changed = false
+
+    if (this.filter !== filter) {
+      this.filter = filter
+      changed = true
+    }
+
+    if (this.contentType !== contentType) {
+      this.contentType = contentType
+      changed = true
+    }
+
+    return changed
   },
   
   setFilter(value) {
-    if (this.filter !== value) {
-      this.filter = value
-      this.items = {}
-      this.loadingRanges = new Set()
+    if (this.applyViewState({ filter: value })) {
+      invalidateFavoritesCollection()
     }
   },
   
   setContentType(value) {
-    if (this.contentType !== value) {
-      this.contentType = value
-      this.items = {}
-      this.loadingRanges = new Set()
+    if (this.applyViewState({ contentType: value })) {
+      invalidateFavoritesCollection()
     }
   },
   
@@ -118,9 +161,8 @@ export const favoritesStore = proxy({
   },
   
   clearAll() {
-    this.items = {}
+    invalidateFavoritesCollection({ resetTotalCount: true })
     this.selectedIds = new Set()
-    this.totalCount = 0
     this.currentViewRange = { start: 0, end: 50 }
   },
   
@@ -150,6 +192,61 @@ export const favoritesStore = proxy({
   }
 })
 
+function resolveFavoritesGroupName(groupName = null) {
+  return groupName || groupsStore.currentGroup
+}
+
+function invalidateFavoritesCollection({ resetTotalCount = false } = {}) {
+  favoritesStore.requestGeneration += 1
+  favoritesStore.invalidateItemsCache()
+  favoritesStore.loadingRanges = new Set()
+
+  if (resetTotalCount) {
+    favoritesStore.totalCount = 0
+  }
+}
+
+function createFavoritesRequestContext(groupName = null) {
+  return {
+    generation: favoritesStore.requestGeneration,
+    filter: favoritesStore.filter,
+    contentType: favoritesStore.contentType,
+    groupName: resolveFavoritesGroupName(groupName)
+  }
+}
+
+function isFavoritesRequestCurrent(context) {
+  return (
+    context.generation === favoritesStore.requestGeneration &&
+    context.filter === favoritesStore.filter &&
+    context.contentType === favoritesStore.contentType &&
+    context.groupName === resolveFavoritesGroupName()
+  )
+}
+
+function beginFavoritesRequestCycle(groupName = null) {
+  invalidateFavoritesCollection()
+  return createFavoritesRequestContext(groupName)
+}
+
+export async function updateFavoritesView({
+  filter = favoritesStore.filter,
+  contentType = favoritesStore.contentType,
+  groupName = null,
+} = {}) {
+  const changed = favoritesStore.applyViewState({ filter, contentType })
+  if (!changed) {
+    return false
+  }
+
+  await refreshFavorites(groupName)
+  return true
+}
+
+export async function handleFavoritesDataChanged(groupName = null) {
+  return await refreshFavorites(groupName)
+}
+
 // 加载指定范围的数据
 export async function loadFavoritesRange(startIndex, endIndex, groupName = null) {
   if (favoritesStore.isRangeLoading(startIndex, endIndex) || 
@@ -171,21 +268,22 @@ export async function loadFavoritesRange(startIndex, endIndex, groupName = null)
   }
   
   favoritesStore.addLoadingRange(startIndex, endIndex)
+  const resolvedGroupName = resolveFavoritesGroupName(groupName)
+  const requestContext = createFavoritesRequestContext(resolvedGroupName)
   
   try {
-    // 如果没有指定分组，从 groupsStore 获取当前分组
-    if (!groupName) {
-      groupName = groupsStore.currentGroup
-    }
-    
     const limit = endIndex - startIndex + 1
     const result = await getFavoritesHistory({
       offset: startIndex,
       limit,
-      groupName,
+      groupName: resolvedGroupName,
       contentType: favoritesStore.contentType !== 'all' ? favoritesStore.contentType : undefined,
       search: favoritesStore.filter || undefined
     })
+
+    if (!isFavoritesRequestCurrent(requestContext)) {
+      return
+    }
     
     // 将数据按索引存储
     favoritesStore.setItemsInRange(startIndex, result.items)
@@ -196,7 +294,9 @@ export async function loadFavoritesRange(startIndex, endIndex, groupName = null)
     }
   } catch (err) {
     console.error(`加载范围 ${startIndex}-${endIndex} 失败:`, err)
-    favoritesStore.error = err.message || '加载失败'
+    if (isFavoritesRequestCurrent(requestContext)) {
+      favoritesStore.error = err.message || '加载失败'
+    }
   } finally {
     favoritesStore.removeLoadingRange(startIndex, endIndex)
   }
@@ -204,50 +304,55 @@ export async function loadFavoritesRange(startIndex, endIndex, groupName = null)
 
 // 初始化加载
 export async function initFavorites(groupName = null) {
+  const resolvedGroupName = resolveFavoritesGroupName(groupName)
+  const requestContext = beginFavoritesRequestCycle(resolvedGroupName)
   favoritesStore.loading = true
   favoritesStore.error = null
   
   try {
-    // 如果没有指定分组，从 groupsStore 获取当前分组
-    if (!groupName) {
-      groupName = groupsStore.currentGroup
-    }
-    
-    favoritesStore.items = {}
-    favoritesStore.loadingRanges = new Set()
-    
     if (favoritesStore.contentType !== 'all' || favoritesStore.filter) {
       const result = await getFavoritesHistory({
         offset: 0,
         limit: 50,
-        groupName,
+        groupName: resolvedGroupName,
         contentType: favoritesStore.contentType !== 'all' ? favoritesStore.contentType : undefined,
         search: favoritesStore.filter || undefined
       })
+
+      if (!isFavoritesRequestCurrent(requestContext)) {
+        return
+      }
       
       favoritesStore.totalCount = result.total_count
       favoritesStore.setItemsInRange(0, result.items)
     } else {
-      const totalCount = await getFavoritesTotalCount(groupName)
+      const totalCount = await getFavoritesTotalCount(resolvedGroupName)
+
+      if (!isFavoritesRequestCurrent(requestContext)) {
+        return
+      }
+
       favoritesStore.totalCount = totalCount
       
       if (totalCount > 0) {
         const endIndex = Math.min(49, totalCount - 1)
-        await loadFavoritesRange(0, endIndex, groupName)
+        await loadFavoritesRange(0, endIndex, resolvedGroupName)
       }
     }
   } catch (err) {
     console.error('初始化收藏列表失败:', err)
-    favoritesStore.error = err.message || '加载失败'
+    if (isFavoritesRequestCurrent(requestContext)) {
+      favoritesStore.error = err.message || '加载失败'
+    }
   } finally {
-    favoritesStore.loading = false
+    if (isFavoritesRequestCurrent(requestContext)) {
+      favoritesStore.loading = false
+    }
   }
 }
 
 // 刷新收藏列表
 export async function refreshFavorites(groupName = null) {
-  favoritesStore.items = {}
-  favoritesStore.loadingRanges = new Set()
   return await initFavorites(groupName)
 }
 
@@ -261,10 +366,7 @@ export async function deleteFavorite(id) {
     if (!confirmed) return false
 
     await apiDeleteFavorite(id)
-    // 清空数据，触发重新加载
-    favoritesStore.removeItem(id)
-    // 刷新数据
-    await refreshFavorites()
+    await handleFavoritesDataChanged()
     return true
   } catch (err) {
     console.error('删除收藏项失败:', err)

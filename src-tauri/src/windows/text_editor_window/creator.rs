@@ -31,10 +31,13 @@ pub fn create_text_editor_window(
     item_index: Option<i32>,
     group_name: Option<String>,
 ) -> Result<String, String> {
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
+    let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(duration) => duration.as_millis(),
+        Err(error) => {
+            eprintln!("系统时钟早于 UNIX_EPOCH，使用回退时间戳创建文本编辑器窗口: {}", error);
+            error.duration().as_millis()
+        }
+    };
     let window_label = format!("text-editor-{}-{}", item_type, timestamp);
     
     let mut url = "windows/textEditor/index.html".to_string();

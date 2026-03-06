@@ -57,7 +57,7 @@ fn create_tables(conn: &Connection) -> Result<(), String> {
     let pinned_exists = conn
         .prepare("PRAGMA table_info(clipboard)")
         .and_then(|mut stmt| {
-            let columns = stmt.query_map([], |row| Ok(row.get::<_, String>(1)?))?
+            let columns = stmt.query_map([], |row| row.get::<_, String>(1))?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(columns.iter().any(|c| c == "is_pinned"))
         })
@@ -73,7 +73,7 @@ fn create_tables(conn: &Connection) -> Result<(), String> {
     let paste_count_exists = conn
         .prepare("PRAGMA table_info(clipboard)")
         .and_then(|mut stmt| {
-            let columns = stmt.query_map([], |row| Ok(row.get::<_, String>(1)?))?
+            let columns = stmt.query_map([], |row| row.get::<_, String>(1))?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(columns.iter().any(|c| c == "paste_count"))
         })
@@ -120,7 +120,7 @@ fn create_tables(conn: &Connection) -> Result<(), String> {
         .prepare("PRAGMA table_info(groups)")
         .and_then(|mut stmt| {
             let columns = stmt.query_map([], |row| {
-                Ok(row.get::<_, String>(1)?)
+                row.get::<_, String>(1)
             })?;
             Ok(columns.into_iter().any(|col| col.map(|c| c == "color").unwrap_or(false)))
         })
@@ -136,7 +136,7 @@ fn create_tables(conn: &Connection) -> Result<(), String> {
     let fav_paste_count_exists = conn
         .prepare("PRAGMA table_info(favorites)")
         .and_then(|mut stmt| {
-            let columns = stmt.query_map([], |row| Ok(row.get::<_, String>(1)?))?
+            let columns = stmt.query_map([], |row| row.get::<_, String>(1))?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(columns.iter().any(|c| c == "paste_count"))
         })
@@ -152,7 +152,7 @@ fn create_tables(conn: &Connection) -> Result<(), String> {
     let source_app_exists = conn
         .prepare("PRAGMA table_info(clipboard)")
         .and_then(|mut stmt| {
-            let columns = stmt.query_map([], |row| Ok(row.get::<_, String>(1)?))?
+            let columns = stmt.query_map([], |row| row.get::<_, String>(1))?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(columns.iter().any(|c| c == "source_app"))
         })
@@ -166,7 +166,7 @@ fn create_tables(conn: &Connection) -> Result<(), String> {
     let source_icon_hash_exists = conn
         .prepare("PRAGMA table_info(clipboard)")
         .and_then(|mut stmt| {
-            let columns = stmt.query_map([], |row| Ok(row.get::<_, String>(1)?))?
+            let columns = stmt.query_map([], |row| row.get::<_, String>(1))?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(columns.iter().any(|c| c == "source_icon_hash"))
         })
@@ -180,7 +180,7 @@ fn create_tables(conn: &Connection) -> Result<(), String> {
     let clip_char_count_exists = conn
         .prepare("PRAGMA table_info(clipboard)")
         .and_then(|mut stmt| {
-            let columns = stmt.query_map([], |row| Ok(row.get::<_, String>(1)?))?
+            let columns = stmt.query_map([], |row| row.get::<_, String>(1))?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(columns.iter().any(|c| c == "char_count"))
         })
@@ -194,7 +194,7 @@ fn create_tables(conn: &Connection) -> Result<(), String> {
     let fav_char_count_exists = conn
         .prepare("PRAGMA table_info(favorites)")
         .and_then(|mut stmt| {
-            let columns = stmt.query_map([], |row| Ok(row.get::<_, String>(1)?))?
+            let columns = stmt.query_map([], |row| row.get::<_, String>(1))?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(columns.iter().any(|c| c == "char_count"))
         })

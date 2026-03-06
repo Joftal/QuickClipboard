@@ -63,8 +63,10 @@ pub fn scroll_page(delta: i32) -> bool {
     let current = state::get_current_page();
     let new_page = if delta > 0 {
         if current >= total_pages - 1 { 0 } else { current + 1 }
+    } else if current <= 0 {
+        total_pages - 1
     } else {
-        if current <= 0 { total_pages - 1 } else { current - 1 }
+        current - 1
     };
     
     state::set_current_page(new_page);

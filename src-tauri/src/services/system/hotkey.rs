@@ -250,7 +250,7 @@ pub fn register_toggle_hotkey(shortcut_str: &str) -> Result<(), String> {
         if is_foreground_globally_disabled() {
             return;
         }
-        let _ = crate::toggle_main_window_visibility(app);
+        crate::toggle_main_window_visibility(app);
     })
 }
 

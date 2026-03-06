@@ -172,7 +172,7 @@ pub async fn show_menu(
     std::thread::spawn(move || {
         loop {
             std::thread::sleep(std::time::Duration::from_millis(50));
-            let has_result = super::MENU_RESULT.get().and_then(|m| m.lock().ok()).map_or(false, |r| r.is_some());
+            let has_result = super::MENU_RESULT.get().and_then(|m| m.lock().ok()).is_some_and(|r| r.is_some());
             if has_result || super::get_active_menu_session() != session_id {
                 let _ = tx.send(());
                 break;

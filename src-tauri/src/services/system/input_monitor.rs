@@ -29,6 +29,7 @@ static QUICKPASTE_KEYBOARD_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
 
 // 中键按下时间记录
 static MIDDLE_BUTTON_PRESS_TIME: Mutex<Option<Instant>> = Mutex::new(None);
+static MIDDLE_BUTTON_PRESS_ID: AtomicU32 = AtomicU32::new(0);
 // 长按是否已触发标记
 static LONG_PRESS_TRIGGERED: AtomicBool = AtomicBool::new(false);
 
@@ -448,6 +449,7 @@ fn handle_mouse_button_press(button: rdev::Button) {
     // 处理中键按下
     if button == rdev::Button::Middle && settings.mouse_middle_button_enabled {
         if settings.mouse_middle_button_modifier == "None" {
+            let press_id = MIDDLE_BUTTON_PRESS_ID.fetch_add(1, Ordering::SeqCst).wrapping_add(1);
             *MIDDLE_BUTTON_PRESS_TIME.lock() = Some(Instant::now());
             LONG_PRESS_TRIGGERED.store(false, Ordering::SeqCst);
             
@@ -456,7 +458,8 @@ fn handle_mouse_button_press(button: rdev::Button) {
                 thread::spawn(move || {
                     thread::sleep(Duration::from_millis(threshold_ms as u64));
                     
-                    if MIDDLE_BUTTON_PRESS_TIME.lock().is_some() {
+                    let is_current_press = MIDDLE_BUTTON_PRESS_ID.load(Ordering::SeqCst) == press_id;
+                    if is_current_press && MIDDLE_BUTTON_PRESS_TIME.lock().is_some() {
                         LONG_PRESS_TRIGGERED.store(true, Ordering::SeqCst);
                         handle_middle_button_action();
                     }
@@ -488,6 +491,9 @@ fn handle_mouse_button_release(button: rdev::Button) {
         }
         
         let press_time = MIDDLE_BUTTON_PRESS_TIME.lock().take();
+        if press_time.is_some() {
+            MIDDLE_BUTTON_PRESS_ID.fetch_add(1, Ordering::SeqCst);
+        }
         
         if settings.mouse_middle_button_trigger == "short_press" {
             if let Some(start) = press_time {

@@ -13,7 +13,7 @@ struct MenuRegions { main: Option<MenuRegion>, subs: Vec<MenuRegion> }
 impl MenuRegions {
     fn contains(&self, x: i32, y: i32) -> bool {
         let hit = |r: &MenuRegion| x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height;
-        self.main.as_ref().map_or(false, hit) || self.subs.iter().any(hit)
+        self.main.as_ref().is_some_and(hit) || self.subs.iter().any(hit)
     }
 }
 
@@ -41,7 +41,7 @@ pub(crate) fn clear_options() { if let Some(m) = MENU_OPTIONS.get() { if let Ok(
 
 pub fn clear_options_for_session(sid: u64) {
     if let Some(m) = MENU_OPTIONS.get() {
-        if let Ok(mut o) = m.lock() { if o.as_ref().map_or(false, |c| c.session_id == sid) { *o = None; } }
+        if let Ok(mut o) = m.lock() { if o.as_ref().is_some_and(|c| c.session_id == sid) { *o = None; } }
     }
 }
 
@@ -56,7 +56,7 @@ pub fn update_menu_regions(main: MenuRegion, subs: Vec<MenuRegion>) {
 }
 
 pub fn is_point_in_menu_region(x: i32, y: i32) -> bool {
-    MENU_REGIONS.get().and_then(|r| r.lock().ok()).map_or(false, |r| r.contains(x, y))
+    MENU_REGIONS.get().and_then(|r| r.lock().ok()).is_some_and(|r| r.contains(x, y))
 }
 
 pub fn clear_menu_regions() {

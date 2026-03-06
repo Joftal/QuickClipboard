@@ -66,10 +66,8 @@ pub fn save_app_icon(exe_path: &str) -> Option<String> {
     }
 
     let icon_path = icons_dir.join(format!("{}.png", hash));
-    if !icon_path.exists() {
-        if std::fs::write(&icon_path, &png_data).is_err() {
-            return None;
-        }
+    if !icon_path.exists() && std::fs::write(&icon_path, &png_data).is_err() {
+        return None;
     }
     
     Some(hash)

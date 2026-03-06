@@ -1,8 +1,17 @@
 use super::models::{FavoriteItem, PaginatedResult, FavoritesQueryParams};
 use super::connection::{with_connection, MAX_CONTENT_LENGTH};
 use crate::utils::{truncate_string, truncate_around_keyword, truncate_html};
+use once_cell::sync::{Lazy, OnceCell};
+use parking_lot::Mutex;
 use rusqlite::{params, OptionalExtension};
+use std::collections::HashSet;
+use std::sync::mpsc::{self, Sender};
 use chrono;
+
+type FavoriteCharCountTask = (String, String, String);
+
+static FAVORITE_CHAR_COUNT_UPDATE_SENDER: OnceCell<Sender<FavoriteCharCountTask>> = OnceCell::new();
+static PENDING_FAVORITE_CHAR_COUNT_IDS: Lazy<Mutex<HashSet<String>>> = Lazy::new(|| Mutex::new(HashSet::new()));
 
 // 计算文本字符数
 fn calculate_char_count(content: &str, content_type: &str) -> Option<i64> {
@@ -18,23 +27,64 @@ fn calculate_char_count(content: &str, content_type: &str) -> Option<i64> {
     }
 }
 
-// 异步更新缺失的字符数
-pub fn update_missing_favorite_char_counts(items: Vec<(String, String, String)>) {
-    if items.is_empty() { return; }
-    
-    std::thread::spawn(move || {
-        let _ = with_connection(|conn| {
-            for (id, content, content_type) in items {
-                if let Some(char_count) = calculate_char_count(&content, &content_type) {
-                    conn.execute(
-                        "UPDATE favorites SET char_count = ?1 WHERE id = ?2",
-                        params![char_count, id],
-                    )?;
+fn get_favorite_char_count_update_sender() -> Sender<FavoriteCharCountTask> {
+    FAVORITE_CHAR_COUNT_UPDATE_SENDER.get_or_init(|| {
+        let (sender, receiver) = mpsc::channel::<FavoriteCharCountTask>();
+
+        std::thread::spawn(move || {
+            while let Ok(first_task) = receiver.recv() {
+                let mut batch = vec![first_task];
+                while let Ok(task) = receiver.try_recv() {
+                    batch.push(task);
+                }
+
+                let _ = with_connection(|conn| {
+                    for (id, content, content_type) in &batch {
+                        if let Some(char_count) = calculate_char_count(content, content_type) {
+                            conn.execute(
+                                "UPDATE favorites SET char_count = ?1 WHERE id = ?2",
+                                params![char_count, id],
+                            )?;
+                        }
+                    }
+                    Ok(())
+                });
+
+                let mut pending_ids = PENDING_FAVORITE_CHAR_COUNT_IDS.lock();
+                for (id, _, _) in batch {
+                    pending_ids.remove(&id);
                 }
             }
-            Ok(())
         });
-    });
+
+        sender
+    }).clone()
+}
+
+// 异步更新缺失的字符数
+pub fn update_missing_favorite_char_counts(items: Vec<FavoriteCharCountTask>) {
+    if items.is_empty() {
+        return;
+    }
+
+    let sender = get_favorite_char_count_update_sender();
+
+    for task in items {
+        let id = task.0.clone();
+        let should_enqueue = {
+            let mut pending_ids = PENDING_FAVORITE_CHAR_COUNT_IDS.lock();
+            pending_ids.insert(id.clone())
+        };
+
+        if !should_enqueue {
+            continue;
+        }
+
+        if sender.send(task).is_err() {
+            PENDING_FAVORITE_CHAR_COUNT_IDS.lock().remove(&id);
+            eprintln!("收藏字符计数回填任务发送失败: {}", id);
+        }
+    }
 }
 
 // 分页查询收藏列表
@@ -299,7 +349,6 @@ pub fn get_favorite_by_id_with_limit(id: &str, max_content_length: Option<usize>
             }
         )
         .optional()
-        .map_err(|e| e.into())
     })
 }
 
@@ -323,12 +372,12 @@ fn reorder_favorite_items(conn: &rusqlite::Connection, from_idx: usize, to_idx: 
     let target_order = items[to_idx].1;
 
     if from_idx < to_idx {
-        for i in (from_idx + 1)..=to_idx {
-            tx.execute("UPDATE favorites SET item_order = item_order + 1 WHERE id = ?1", params![items[i].0])?;
+        for item in items.iter().take(to_idx + 1).skip(from_idx + 1) {
+            tx.execute("UPDATE favorites SET item_order = item_order + 1 WHERE id = ?1", params![&item.0])?;
         }
     } else {
-        for i in to_idx..from_idx {
-            tx.execute("UPDATE favorites SET item_order = item_order - 1 WHERE id = ?1", params![items[i].0])?;
+        for item in items.iter().take(from_idx).skip(to_idx) {
+            tx.execute("UPDATE favorites SET item_order = item_order - 1 WHERE id = ?1", params![&item.0])?;
         }
     }
     tx.execute("UPDATE favorites SET item_order = ?1, updated_at = ?2 WHERE id = ?3", params![target_order, now, moved_id])?;

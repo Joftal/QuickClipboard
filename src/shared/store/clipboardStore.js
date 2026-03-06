@@ -9,16 +9,52 @@ import {
   pasteClipboardItem as apiPasteClipboardItem
 } from '@shared/api'
 
-listen('paste-count-updated', (event) => {
-  const id = event.payload
-  for (const key of Object.keys(clipboardStore.items)) {
-    const item = clipboardStore.items[key]
-    if (item && item.id === id) {
-      clipboardStore.items[key] = { ...item, paste_count: (item.paste_count || 0) + 1 }
-      break
-    }
+let clipboardStoreListenerDispose = null
+let clipboardStoreListenerInitPromise = null
+
+export async function initClipboardStoreListeners() {
+  if (clipboardStoreListenerDispose) {
+    return
   }
-})
+
+  if (clipboardStoreListenerInitPromise) {
+    return clipboardStoreListenerInitPromise
+  }
+
+  clipboardStoreListenerInitPromise = listen('paste-count-updated', (event) => {
+    const id = event.payload
+    for (const key of Object.keys(clipboardStore.items)) {
+      const item = clipboardStore.items[key]
+      if (item && item.id === id) {
+        clipboardStore.items[key] = { ...item, paste_count: (item.paste_count || 0) + 1 }
+        break
+      }
+    }
+  }).then(unlisten => {
+    clipboardStoreListenerDispose = unlisten
+  }).catch(error => {
+    console.error('初始化剪贴板 store 监听失败:', error)
+    throw error
+  }).finally(() => {
+    clipboardStoreListenerInitPromise = null
+  })
+
+  return clipboardStoreListenerInitPromise
+}
+
+export function disposeClipboardStoreListeners() {
+  if (!clipboardStoreListenerDispose) {
+    return
+  }
+
+  try {
+    clipboardStoreListenerDispose()
+  } catch (error) {
+    console.error('释放剪贴板 store 监听失败:', error)
+  } finally {
+    clipboardStoreListenerDispose = null
+  }
+}
 
 const CACHE_WINDOW_SIZE = 200 
 const CACHE_BUFFER = 100      
@@ -29,6 +65,7 @@ export const clipboardStore = proxy({
   totalCount: 0,
   filter: '',
   contentType: 'all',
+  requestGeneration: 0,
   selectedIds: new Set(),
   loading: false,
   error: null,
@@ -76,28 +113,35 @@ export const clipboardStore = proxy({
     return index in this.items
   },
 
-  addItem(item) {
+  invalidateItemsCache() {
     this.items = {}
   },
-  
-  // 删除项
-  removeItem(id) {
-    this.items = {}
+
+  applyViewState({ filter = this.filter, contentType = this.contentType } = {}) {
+    let changed = false
+
+    if (this.filter !== filter) {
+      this.filter = filter
+      changed = true
+    }
+
+    if (this.contentType !== contentType) {
+      this.contentType = contentType
+      changed = true
+    }
+
+    return changed
   },
   
   setFilter(value) {
-    if (this.filter !== value) {
-      this.filter = value
-      this.items = {}
-      this.loadingRanges = new Set()
+    if (this.applyViewState({ filter: value })) {
+      invalidateClipboardCollection()
     }
   },
   
   setContentType(value) {
-    if (this.contentType !== value) {
-      this.contentType = value
-      this.items = {}
-      this.loadingRanges = new Set()
+    if (this.applyViewState({ contentType: value })) {
+      invalidateClipboardCollection()
     }
   },
   
@@ -114,9 +158,8 @@ export const clipboardStore = proxy({
   },
   
   clearAll() {
-    this.items = {}
+    invalidateClipboardCollection({ resetTotalCount: true })
     this.selectedIds = new Set()
-    this.totalCount = 0
     this.currentViewRange = { start: 0, end: 50 }
   },
   
@@ -144,6 +187,37 @@ export const clipboardStore = proxy({
   }
 })
 
+function createClipboardRequestContext() {
+  return {
+    generation: clipboardStore.requestGeneration,
+    filter: clipboardStore.filter,
+    contentType: clipboardStore.contentType
+  }
+}
+
+function invalidateClipboardCollection({ resetTotalCount = false } = {}) {
+  clipboardStore.requestGeneration += 1
+  clipboardStore.invalidateItemsCache()
+  clipboardStore.loadingRanges = new Set()
+
+  if (resetTotalCount) {
+    clipboardStore.totalCount = 0
+  }
+}
+
+function isClipboardRequestCurrent(context) {
+  return (
+    context.generation === clipboardStore.requestGeneration &&
+    context.filter === clipboardStore.filter &&
+    context.contentType === clipboardStore.contentType
+  )
+}
+
+function beginClipboardRequestCycle() {
+  invalidateClipboardCollection()
+  return createClipboardRequestContext()
+}
+
 // 加载指定范围的数据
 export async function loadClipboardRange(startIndex, endIndex) {
   // 避免重复加载
@@ -166,6 +240,7 @@ export async function loadClipboardRange(startIndex, endIndex) {
   }
   
   clipboardStore.addLoadingRange(startIndex, endIndex)
+  const requestContext = createClipboardRequestContext()
   
   try {
     const limit = endIndex - startIndex + 1
@@ -175,6 +250,10 @@ export async function loadClipboardRange(startIndex, endIndex) {
       contentType: clipboardStore.contentType !== 'all' ? clipboardStore.contentType : undefined,
       search: clipboardStore.filter || undefined
     })
+
+    if (!isClipboardRequestCurrent(requestContext)) {
+      return
+    }
     
     // 将数据按索引存储
     clipboardStore.setItemsInRange(startIndex, result.items)
@@ -185,25 +264,35 @@ export async function loadClipboardRange(startIndex, endIndex) {
     }
   } catch (err) {
     console.error(`加载范围 ${startIndex}-${endIndex} 失败:`, err)
-    clipboardStore.error = err.message || '加载失败'
+    if (isClipboardRequestCurrent(requestContext)) {
+      clipboardStore.error = err.message || '加载失败'
+    }
   } finally {
     clipboardStore.removeLoadingRange(startIndex, endIndex)
   }
 }
 
 export async function loadClipboardItems() {
-  return await refreshClipboardHistory()
+  return await handleClipboardDataChanged()
+}
+
+export async function updateClipboardView({ filter = clipboardStore.filter, contentType = clipboardStore.contentType } = {}) {
+  const changed = clipboardStore.applyViewState({ filter, contentType })
+  if (!changed) {
+    return false
+  }
+
+  await refreshClipboardHistory()
+  return true
 }
 
 // 初始化加载
 export async function initClipboardItems() {
+  const requestContext = beginClipboardRequestCycle()
   clipboardStore.loading = true
   clipboardStore.error = null
   
   try {
-    clipboardStore.items = {}
-    clipboardStore.loadingRanges = new Set()
-    
     if (clipboardStore.contentType !== 'all' || clipboardStore.filter) {
       const result = await getClipboardHistory({
         offset: 0,
@@ -211,11 +300,20 @@ export async function initClipboardItems() {
         contentType: clipboardStore.contentType !== 'all' ? clipboardStore.contentType : undefined,
         search: clipboardStore.filter || undefined
       })
+
+      if (!isClipboardRequestCurrent(requestContext)) {
+        return
+      }
       
       clipboardStore.totalCount = result.total_count
       clipboardStore.setItemsInRange(0, result.items)
     } else {
       const totalCount = await getClipboardTotalCount()
+
+      if (!isClipboardRequestCurrent(requestContext)) {
+        return
+      }
+
       clipboardStore.totalCount = totalCount
       
       if (totalCount > 0) {
@@ -225,25 +323,30 @@ export async function initClipboardItems() {
     }
   } catch (err) {
     console.error('初始化剪贴板失败:', err)
-    clipboardStore.error = err.message || '加载失败'
+    if (isClipboardRequestCurrent(requestContext)) {
+      clipboardStore.error = err.message || '加载失败'
+    }
   } finally {
-    clipboardStore.loading = false
+    if (isClipboardRequestCurrent(requestContext)) {
+      clipboardStore.loading = false
+    }
   }
 }
 
 // 刷新剪贴板历史
 export async function refreshClipboardHistory() {
-  clipboardStore.items = {}
-  clipboardStore.loadingRanges = new Set()
   return await initClipboardItems()
+}
+
+export async function handleClipboardDataChanged() {
+  return await refreshClipboardHistory()
 }
 
 // 删除剪贴板项
 export async function deleteClipboardItem(id) {
   try {
     await apiDeleteItem(id)
-    clipboardStore.removeItem(id)
-    await refreshClipboardHistory()
+    await handleClipboardDataChanged()
     return true
   } catch (err) {
     console.error('删除剪贴板项失败:', err)

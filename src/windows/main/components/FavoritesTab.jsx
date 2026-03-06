@@ -1,7 +1,7 @@
 import { useRef, forwardRef, useImperativeHandle, useEffect, useState, useCallback } from 'react';
 import { useSnapshot } from 'valtio';
 import { listen } from '@tauri-apps/api/event';
-import { favoritesStore, refreshFavorites } from '@shared/store';
+import { favoritesStore, updateFavoritesView } from '@shared/store';
 import { navigationStore } from '@shared/store/navigationStore';
 import { groupsStore } from '@shared/store/groupsStore';
 import { settingsStore } from '@shared/store/settingsStore';
@@ -27,8 +27,10 @@ const FavoritesTab = forwardRef(({
     }
     
     searchDebounceRef.current = setTimeout(() => {
-      favoritesStore.setFilter(query);
-      refreshFavorites();
+      updateFavoritesView({
+        filter: query,
+        contentType: contentFilter,
+      });
       if (query) {
         navigationStore.setSelectedIndex(0);
       } else {
@@ -38,7 +40,6 @@ const FavoritesTab = forwardRef(({
   }, []);
 
   useEffect(() => {
-    favoritesStore.setContentType(contentFilter);
     debouncedSearch(searchQuery, contentFilter);
     
     return () => {

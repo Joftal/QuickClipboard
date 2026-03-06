@@ -10,7 +10,7 @@ import { createRoot } from 'react-dom/client'
 import '@shared/i18n';
 import { useTranslation } from 'react-i18next'
 import '@shared/styles/index.css'
-import { initStores } from '@shared/store'
+import { disposeStores, initStores } from '@shared/store'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import logoIcon from '@/assets/icon128.png';
 function App() {
@@ -313,6 +313,14 @@ function App() {
 initStores().then(() => {
   createRoot(document.getElementById('root')).render(<App />)
 })
+
+window.addEventListener('beforeunload', disposeStores)
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    disposeStores()
+  })
+}
 
 
 

@@ -108,7 +108,7 @@ function QuickPasteWindow() {
         if (isClipboardTab) {
           await loadClipboardRange(start, end);
         } else {
-          await loadFavoritesRange(groupSnap.currentGroup, start, end);
+          await loadFavoritesRange(start, end, groupSnap.currentGroup);
         }
       }
     };

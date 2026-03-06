@@ -252,7 +252,7 @@ pub fn copy_image_to_clipboard(file_path: String) -> Result<(), String> {
     let final_path = if is_in_data_dir {
         file_path.clone()
     } else {
-        let image_data = std::fs::read(&path)
+        let image_data = std::fs::read(path)
             .map_err(|e| format!("读取图片失败: {}", e))?;
         
         let hash = format!("{:x}", Sha256::digest(&image_data));

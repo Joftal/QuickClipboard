@@ -1,9 +1,17 @@
 use super::models::{ClipboardItem, PaginatedResult, QueryParams};
 use super::connection::{with_connection, MAX_CONTENT_LENGTH};
 use crate::utils::{truncate_string, truncate_around_keyword, truncate_html};
+use once_cell::sync::{Lazy, OnceCell};
+use parking_lot::Mutex;
 use rusqlite::{params, OptionalExtension};
 use std::collections::HashSet;
+use std::sync::mpsc::{self, Sender};
 use chrono;
+
+type ClipboardCharCountTask = (i64, String, String);
+
+static CHAR_COUNT_UPDATE_SENDER: OnceCell<Sender<ClipboardCharCountTask>> = OnceCell::new();
+static PENDING_CHAR_COUNT_IDS: Lazy<Mutex<HashSet<i64>>> = Lazy::new(|| Mutex::new(HashSet::new()));
 
 // 计算文本字符数
 fn calculate_char_count(content: &str, content_type: &str) -> Option<i64> {
@@ -19,23 +27,63 @@ fn calculate_char_count(content: &str, content_type: &str) -> Option<i64> {
     }
 }
 
-// 异步更新缺失的字符数
-pub fn update_missing_char_counts(items: Vec<(i64, String, String)>) {
-    if items.is_empty() { return; }
-    
-    std::thread::spawn(move || {
-        let _ = with_connection(|conn| {
-            for (id, content, content_type) in items {
-                if let Some(char_count) = calculate_char_count(&content, &content_type) {
-                    conn.execute(
-                        "UPDATE clipboard SET char_count = ?1 WHERE id = ?2",
-                        params![char_count, id],
-                    )?;
+fn get_char_count_update_sender() -> Sender<ClipboardCharCountTask> {
+    CHAR_COUNT_UPDATE_SENDER.get_or_init(|| {
+        let (sender, receiver) = mpsc::channel::<ClipboardCharCountTask>();
+
+        std::thread::spawn(move || {
+            while let Ok(first_task) = receiver.recv() {
+                let mut batch = vec![first_task];
+                while let Ok(task) = receiver.try_recv() {
+                    batch.push(task);
+                }
+
+                let _ = with_connection(|conn| {
+                    for (id, content, content_type) in &batch {
+                        if let Some(char_count) = calculate_char_count(content, content_type) {
+                            conn.execute(
+                                "UPDATE clipboard SET char_count = ?1 WHERE id = ?2",
+                                params![char_count, id],
+                            )?;
+                        }
+                    }
+                    Ok(())
+                });
+
+                let mut pending_ids = PENDING_CHAR_COUNT_IDS.lock();
+                for (id, _, _) in batch {
+                    pending_ids.remove(&id);
                 }
             }
-            Ok(())
         });
-    });
+
+        sender
+    }).clone()
+}
+
+// 异步更新缺失的字符数
+pub fn update_missing_char_counts(items: Vec<ClipboardCharCountTask>) {
+    if items.is_empty() {
+        return;
+    }
+
+    let sender = get_char_count_update_sender();
+
+    for task @ (id, _, _) in items {
+        let should_enqueue = {
+            let mut pending_ids = PENDING_CHAR_COUNT_IDS.lock();
+            pending_ids.insert(id)
+        };
+
+        if !should_enqueue {
+            continue;
+        }
+
+        if sender.send(task).is_err() {
+            PENDING_CHAR_COUNT_IDS.lock().remove(&id);
+            eprintln!("字符计数回填任务发送失败: {}", id);
+        }
+    }
 }
 
 // 按逗号拆分图片ID
@@ -291,7 +339,6 @@ pub fn get_clipboard_item_by_id_with_limit(id: i64, max_content_length: Option<u
             }
         )
         .optional()
-        .map_err(|e| e.into())
     })
 }
 
@@ -316,11 +363,9 @@ pub fn limit_clipboard_history(max_count: u64) -> Result<(), String> {
         let mut stmt = conn.prepare(sql_ids)?;
         let ids_iter = stmt.query_map(params![max_count], |row| row.get::<_, String>(0))?;
         let mut set: HashSet<String> = HashSet::new();
-        for r in ids_iter {
-            if let Ok(s) = r {
-                for iid in split_image_ids(&s) {
-                    set.insert(iid);
-                }
+        for s in ids_iter.flatten() {
+            for iid in split_image_ids(&s) {
+                set.insert(iid);
             }
         }
         drop(stmt);
@@ -380,11 +425,9 @@ pub fn clear_clipboard_history() -> Result<(), String> {
         )?;
         let ids_iter = stmt.query_map([], |row| row.get::<_, String>(0))?;
         let mut set: HashSet<String> = HashSet::new();
-        for r in ids_iter {
-            if let Ok(s) = r {
-                for iid in split_image_ids(&s) {
-                    set.insert(iid);
-                }
+        for s in ids_iter.flatten() {
+            for iid in split_image_ids(&s) {
+                set.insert(iid);
             }
         }
         drop(stmt);
@@ -413,12 +456,12 @@ fn reorder_items(conn: &rusqlite::Connection, from_idx: usize, to_idx: usize, it
     let target_order = items[to_idx].1;
 
     if from_idx < to_idx {
-        for i in (from_idx + 1)..=to_idx {
-            tx.execute("UPDATE clipboard SET item_order = item_order + 1 WHERE id = ?1", params![items[i].0])?;
+        for item in items.iter().take(to_idx + 1).skip(from_idx + 1) {
+            tx.execute("UPDATE clipboard SET item_order = item_order + 1 WHERE id = ?1", params![item.0])?;
         }
     } else {
-        for i in to_idx..from_idx {
-            tx.execute("UPDATE clipboard SET item_order = item_order - 1 WHERE id = ?1", params![items[i].0])?;
+        for item in items.iter().take(from_idx).skip(to_idx) {
+            tx.execute("UPDATE clipboard SET item_order = item_order - 1 WHERE id = ?1", params![item.0])?;
         }
     }
     tx.execute("UPDATE clipboard SET item_order = ?1, updated_at = ?2 WHERE id = ?3", params![target_order, now, moved_id])?;

@@ -4,7 +4,7 @@ import '@shared/styles/uno';
 import '@unocss/reset/tailwind.css';
 import '@shared/styles/index.css';
 import '@shared/i18n';
-import { initStores } from '@shared/store';
+import { disposeStores, initStores } from '@shared/store';
 import { initClipboardItems } from '@shared/store/clipboardStore';
 import { initFavorites } from '@shared/store/favoritesStore';
 import { loadGroups } from '@shared/store/groupsStore';
@@ -16,3 +16,11 @@ initStores().then(() => {
     </React.StrictMode>);
   return Promise.all([initClipboardItems(), loadGroups().then(() => initFavorites())]);
 });
+
+window.addEventListener('beforeunload', disposeStores);
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    disposeStores();
+  });
+}

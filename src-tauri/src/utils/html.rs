@@ -59,10 +59,8 @@ pub fn truncate_html(html: String, max_visible_len: usize) -> String {
                         if let Some(pos) = open_tags.iter().rposition(|t| t == &tag_name) {
                             open_tags.remove(pos);
                         }
-                    } else {
-                        if open_tags.len() < 100 {
-                            open_tags.push(tag_name);
-                        }
+                    } else if open_tags.len() < 100 {
+                        open_tags.push(tag_name);
                     }
                 }
             }
