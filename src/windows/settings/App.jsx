@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { settingsStore } from '@shared/store/settingsStore';
 import { useTheme, applyThemeToBody } from '@shared/hooks/useTheme';
 import { useSettingsSync } from '@shared/hooks/useSettingsSync';
-import { applyBackgroundImage, clearBackgroundImage } from '@shared/utils/backgroundManager';
 import SettingsHeader from './components/SettingsHeader';
 import SettingsSidebar from './components/SettingsSidebar';
 import TabBar from '@shared/components/ui/TabBar';
@@ -12,27 +11,19 @@ import GeneralSection from './sections/GeneralSection';
 import AppearanceSection from './sections/AppearanceSection';
 import ShortcutsSection from './sections/ShortcutsSection';
 import ClipboardSection from './sections/ClipboardSection';
-import AIConfigSection from './sections/AIConfigSection';
-import TranslationSection from './sections/TranslationSection';
 import PreviewSection from './sections/PreviewSection';
-import ScreenshotSection from './sections/ScreenshotSection';
-import SoundSection from './sections/SoundSection';
 import AppFilterSection from './sections/AppFilterSection';
 import DataManagementSection from './sections/DataManagementSection';
-import AboutSection from './sections/AboutSection';
 import ToastContainer from '@shared/components/common/ToastContainer';
 function App() {
   const { t } = useTranslation();
   const snap = useSnapshot(settingsStore);
   const {
-    theme,
-    darkThemeStyle,
-    backgroundImagePath
+    theme
   } = snap;
   const {
     effectiveTheme,
-    isDark,
-    isBackground
+    isDark
   } = useTheme();
   const [activeSection, setActiveSection] = useState('general');
   const [pendingTargetLabel, setPendingTargetLabel] = useState('');
@@ -40,7 +31,6 @@ function App() {
   const [shortcutsTab, setShortcutsTab] = useState('globalHotkey');
   const shortcutsTabs = [
     { id: 'globalHotkey', label: t('settings.shortcuts.tabs.globalHotkey') },
-    { id: 'screenshotHotkey', label: t('settings.shortcuts.tabs.screenshotHotkey') },
     { id: 'pinOps', label: t('settings.shortcuts.tabs.pinOps') },
     { id: 'navigation', label: t('settings.shortcuts.tabs.navigation') },
     { id: 'quickActions', label: t('settings.shortcuts.tabs.quickActions') },
@@ -96,19 +86,6 @@ function App() {
   useEffect(() => {
     applyThemeToBody(theme, 'settings');
   }, [theme, effectiveTheme]);
-
-  // 应用背景图片（仅在背景主题时）
-  useEffect(() => {
-    if (isBackground && backgroundImagePath) {
-      applyBackgroundImage({
-        containerSelector: '.settings-container',
-        backgroundImagePath,
-        windowName: 'settings'
-      });
-    } else {
-      clearBackgroundImage('.settings-container');
-    }
-  }, [isBackground, backgroundImagePath]);
   const handleSettingChange = async (key, value) => {
     await settingsStore.saveSetting(key, value);
   };
@@ -128,29 +105,14 @@ function App() {
       case 'clipboard':
         content = <ClipboardSection settings={snap} onSettingChange={handleSettingChange} />;
         break;
-      case 'aiConfig':
-        content = <AIConfigSection settings={snap} onSettingChange={handleSettingChange} />;
-        break;
-      case 'translation':
-        content = <TranslationSection settings={snap} onSettingChange={handleSettingChange} />;
-        break;
       case 'quickpaste':
         content = <PreviewSection settings={snap} onSettingChange={handleSettingChange} />;
-        break;
-      case 'screenshot':
-        content = <ScreenshotSection settings={snap} onSettingChange={handleSettingChange} />;
-        break;
-      case 'sound':
-        content = <SoundSection settings={snap} onSettingChange={handleSettingChange} />;
         break;
       case 'appFilter':
         content = <AppFilterSection settings={snap} onSettingChange={handleSettingChange} />;
         break;
       case 'dataManagement':
         content = <DataManagementSection />;
-        break;
-      case 'about':
-        content = <AboutSection />;
         break;
       default:
         content = <GeneralSection settings={snap} onSettingChange={handleSettingChange} />;
@@ -170,7 +132,6 @@ function App() {
     transition-colors duration-500 ease-in-out
     ${isDark ? 'dark bg-gray-900' : ''}
     ${!isDark ? 'bg-white' : ''}
-    ${isBackground ? 'backdrop-blur-md bg-opacity-0' : ''}
   `.trim().replace(/\s+/g, ' ');
   return <div className={containerClasses}>
       <SettingsHeader onNavigate={handleSearchNavigate} />
@@ -184,7 +145,7 @@ function App() {
             <TabBar tabs={shortcutsTabs} activeTab={shortcutsTab} onTabChange={setShortcutsTab} />
           )}
           
-          <main className={`flex-1 overflow-y-auto p-6 transition-colors duration-500 ${isBackground ? 'bg-transparent' : 'bg-gray-50 dark:bg-gray-900'}`}>
+          <main className="flex-1 overflow-y-auto p-6 transition-colors duration-500 bg-gray-50 dark:bg-gray-900">
             {renderSection()}
           </main>
         </div>

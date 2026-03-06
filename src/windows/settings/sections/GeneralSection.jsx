@@ -155,10 +155,6 @@ function GeneralSection({
         <Toggle checked={settings.runAsAdmin} onChange={handleRunAsAdminChange} disabled={runAsAdminLoading} />
       </SettingItem>
 
-      <SettingItem label={t('settings.general.startupNotification')} description={t('settings.general.startupNotificationDesc')}>
-        <Toggle checked={settings.showStartupNotification} onChange={checked => onSettingChange('showStartupNotification', checked)} />
-      </SettingItem>
-
       <SettingItem label={t('settings.general.historyLimit')} description={t('settings.general.historyLimitDesc')}>
         <Select value={settings.historyLimit} onChange={value => onSettingChange('historyLimit', parseInt(value))} options={historyLimitOptions} />
       </SettingItem>

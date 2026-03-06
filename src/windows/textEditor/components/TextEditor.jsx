@@ -21,10 +21,9 @@ function TextEditor({
   const wrapCompartment = useRef(new Compartment());
   const themeCompartment = useRef(new Compartment());
   const {
-    theme,
-    systemIsDark
+    theme
   } = useSnapshot(settingsStore);
-  const isDark = theme === 'dark' || (theme === 'auto' && systemIsDark);
+  const isDark = theme === 'dark';
   const getCustomTheme = dark => EditorView.theme({
     '&': {
       height: '100%',

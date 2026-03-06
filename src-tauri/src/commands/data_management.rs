@@ -56,7 +56,7 @@ pub fn dm_check_target_has_data(payload: CheckTargetPayload) -> Result<crate::se
 }
 
 #[tauri::command]
-pub fn dm_change_storage_path(app: tauri::AppHandle, payload: ChangePathPayload) -> Result<String, String> {
+pub fn dm_change_storage_path(_app: tauri::AppHandle, payload: ChangePathPayload) -> Result<String, String> {
     let path = std::path::PathBuf::from(payload.new_path);
     let new_dir = crate::services::data_management::change_storage_dir(path, &payload.mode)?;
 
@@ -64,7 +64,7 @@ pub fn dm_change_storage_path(app: tauri::AppHandle, payload: ChangePathPayload)
 }
 
 #[tauri::command]
-pub fn dm_reset_storage_path_to_default(app: tauri::AppHandle, payload: ResetPathPayload) -> Result<String, String> {
+pub fn dm_reset_storage_path_to_default(_app: tauri::AppHandle, payload: ResetPathPayload) -> Result<String, String> {
     let dir = crate::services::data_management::reset_storage_dir_to_default(&payload.mode)?;
 
     Ok(dir.to_string_lossy().to_string())
@@ -85,7 +85,7 @@ pub fn dm_import_data_zip(payload: ImportPayload) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub fn dm_reset_all_data(app: tauri::AppHandle) -> Result<String, String> {
+pub fn dm_reset_all_data(_app: tauri::AppHandle) -> Result<String, String> {
     let path = crate::services::data_management::reset_all_data()?;
     Ok(path)
 }

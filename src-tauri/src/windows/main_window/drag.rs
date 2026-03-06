@@ -28,7 +28,7 @@ mod platform {
         once_cell::sync::Lazy::new(|| parking_lot::Mutex::new((0, 0)));
 
     pub unsafe fn install_wndproc(hwnd: HWND) {
-        let old = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, window_proc as isize);
+        let old = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, window_proc as *const () as isize);
         ORIGINAL_WNDPROC_PTR.store(old, Ordering::SeqCst);
     }
 

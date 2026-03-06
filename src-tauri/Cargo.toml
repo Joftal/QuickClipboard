@@ -15,7 +15,6 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [ "protocol-asset", "tray-icon"] }
 tauri-plugin-opener = "2.5.0"
-tauri-plugin-notification = "2"
 tauri-plugin-dialog = "2.4.2"
 tauri-plugin-single-instance = "2.2.1"
 tauri-plugin-updater = "2"
@@ -34,7 +33,6 @@ uuid = { version = "1.0", features = ["v4"] }
 chrono = "0.4"
 dirs = "5.0"
 sha2 = "0.10"
-rodio = "0.17"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "time", "fs", "io-util"] }
 fastrand = "2.0"
 regex = "1.11.1"
@@ -55,12 +53,6 @@ rstar = "0.12.2"
 qcocr = {git="https://github.com/mosheng1/qcocr"}
 winreg = "0.55"
 
-screenshot-suite = { path = "plugins/screenshot-suite", optional = true }
-
-# 图片查看器 (社区编译时不启用)
-gpu-image-viewer = { git = "ssh://git@github.com/mosheng1/gpu-image-viewer.git", optional = true }
-# gpu-image-viewer = { path = "plugins/gpu-image-viewer", optional = true }
-
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
     "Win32_UI_WindowsAndMessaging",
@@ -77,9 +69,7 @@ windows = { version = "0.62", features = [
 ] }
 
 [features]
-default = ["gpu-image-viewer", "screenshot-suite"]
-gpu-image-viewer = ["dep:gpu-image-viewer"]
-screenshot-suite = ["dep:screenshot-suite"]
+default = []
 custom-protocol = ["tauri/custom-protocol"]
 
 [profile.release]
@@ -91,4 +81,3 @@ strip = "debuginfo"
 debug = false
 incremental = false
 overflow-checks = false
-

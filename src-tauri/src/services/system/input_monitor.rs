@@ -166,24 +166,6 @@ fn handle_key_press(key: Key, _event: &Event) -> bool {
         }
     }
     
-    // Ctrl+V 粘贴音效
-    if matches!(key, Key::KeyV) {
-        if let Some(state) = KEYBOARD_STATE.try_lock() {
-            if state.ctrl && !state.alt && !state.shift && !state.meta {
-                crate::AppSounds::play_paste_immediate();
-            }
-        }
-    }
-    
-    // Shift+Insert 粘贴音效
-    if matches!(key, Key::Insert) {
-        if let Some(state) = KEYBOARD_STATE.try_lock() {
-            if state.shift && !state.ctrl && !state.alt && !state.meta {
-                crate::AppSounds::play_paste_immediate();
-            }
-        }
-    }
-    
     if NAVIGATION_KEYS_ENABLED.load(Ordering::SeqCst) {
         return handle_navigation_key(key);
     }
@@ -474,9 +456,6 @@ pub fn reset_scroll_direction() {
 fn handle_wheel_event(delta_y: i64) {
     let dir = if delta_y > 0 { 1 } else if delta_y < 0 { -1 } else { 0 };
     *SCROLL_DIRECTION.lock() = dir;
-
-    #[cfg(feature = "screenshot-suite")]
-    screenshot_suite::set_scroll_direction(dir);
 
     use crate::windows::tray::{is_menu_visible, scroll_page};
 

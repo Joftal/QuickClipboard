@@ -18,13 +18,6 @@ export const TOOL_REGISTRY = {
     type: 'action',
     defaultLocation: 'titlebar',
   },
-  'screenshot-button': {
-    id: 'screenshot-button',
-    icon:"ti ti-camera",
-    titleKey: 'tools.screenshot',
-    type: 'action',
-    defaultLocation: 'panel',
-  },
   'one-time-paste-button': {
     id: 'one-time-paste-button',
     icon:"ti ti-trash",
@@ -33,14 +26,6 @@ export const TOOL_REGISTRY = {
     defaultLocation: 'panel',
     defaultActive: false
   },
-  // 'ai-translation-button': {
-  //   id: 'ai-translation-button',
-  //   icon:"ti ti-language",
-  //   titleKey: 'tools.aiTranslation',
-  //   type: 'toggle',
-  //   defaultLocation: 'panel',
-  //   defaultActive: false
-  // },
   'format-toggle-button': {
     id: 'format-toggle-button',
     icon:"ti ti-typography",
@@ -55,9 +40,7 @@ export const TOOL_REGISTRY = {
 export const DEFAULT_LAYOUT = {
   titlebar: ['pin-button', 'settings-button'],
   panel: [
-    'screenshot-button',
     'one-time-paste-button',
-    // 'ai-translation-button',
     'format-toggle-button'
   ]
 }

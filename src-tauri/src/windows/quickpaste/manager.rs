@@ -26,9 +26,6 @@ fn create_window(app: &AppHandle) -> Result<tauri::WebviewWindow, String> {
         .build()
         .map_err(|e| e.to_string())?;
     
-    #[cfg(debug_assertions)]
-    window.open_devtools();
-    
     Ok(window)
 }
 

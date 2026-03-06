@@ -8,6 +8,7 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
 
 // 默认存储文件名
+#[allow(dead_code)]
 const DEFAULT_STORE_FILE: &str = "app-store.json";
 
 // 全局 AppHandle 引用
@@ -20,6 +21,7 @@ pub fn init(app: &AppHandle) {
 }
 
 // 获取存储路径
+#[allow(dead_code)]
 fn get_store_path(app: &AppHandle) -> PathBuf {
     app.path().app_data_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
@@ -27,6 +29,7 @@ fn get_store_path(app: &AppHandle) -> PathBuf {
 }
 
 // 获取值
+#[allow(dead_code)]
 pub fn get<T: serde::de::DeserializeOwned>(key: &str) -> Option<T> {
     let handle = APP_HANDLE.lock().unwrap();
     let app = handle.as_ref()?;
@@ -38,6 +41,7 @@ pub fn get<T: serde::de::DeserializeOwned>(key: &str) -> Option<T> {
 }
 
 // 设置值
+#[allow(dead_code)]
 pub fn set<T: serde::Serialize>(key: &str, value: &T) -> Result<(), String> {
     let handle = APP_HANDLE.lock().unwrap();
     let app = handle.as_ref().ok_or("AppHandle 未初始化")?;
@@ -53,6 +57,7 @@ pub fn set<T: serde::Serialize>(key: &str, value: &T) -> Result<(), String> {
 }
 
 // 删除值
+#[allow(dead_code)]
 pub fn delete(key: &str) -> Result<(), String> {
     let handle = APP_HANDLE.lock().unwrap();
     let app = handle.as_ref().ok_or("AppHandle 未初始化")?;
@@ -67,6 +72,7 @@ pub fn delete(key: &str) -> Result<(), String> {
 }
 
 // 检查键是否存在
+#[allow(dead_code)]
 pub fn has(key: &str) -> bool {
     let handle = APP_HANDLE.lock().unwrap();
     let Some(app) = handle.as_ref() else { return false };
@@ -78,6 +84,7 @@ pub fn has(key: &str) -> bool {
 }
 
 // 获取所有键
+#[allow(dead_code)]
 pub fn keys() -> Vec<String> {
     let handle = APP_HANDLE.lock().unwrap();
     let Some(app) = handle.as_ref() else { return vec![] };

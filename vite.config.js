@@ -2,12 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import UnoCSS from 'unocss/vite'
 import { resolve } from 'path'
-import { existsSync } from 'fs'
 import wasm from 'vite-plugin-wasm'
 
 const isDev = process.env.NODE_ENV === 'development'
 const isTauriDebug = process.env.TAURI_DEBUG === 'true'
-const isCommunity = process.env.QC_COMMUNITY === '1'
 
 export default defineConfig({
   root: 'src',
@@ -71,7 +69,7 @@ export default defineConfig({
 
     rollupOptions: {
       input: (() => {
-        const inputs = {
+        return {
           main: resolve(__dirname, 'src/windows/main/index.html'),
           settings: resolve(__dirname, 'src/windows/settings/index.html'),
           quickpaste: resolve(__dirname, 'src/windows/quickpaste/index.html'),
@@ -82,11 +80,6 @@ export default defineConfig({
           pinImage: resolve(__dirname, 'src/windows/pinImage/pinImage.html'),
           updater: resolve(__dirname, 'src/windows/updater/index.html'),
         }
-        const screenshotPath = resolve(__dirname, 'src/windows/screenshot/index.html')
-        if (!isCommunity && existsSync(screenshotPath)) {
-          inputs.screenshot = screenshotPath
-        }
-        return inputs
       })(),
 
       output: {

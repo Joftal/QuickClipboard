@@ -22,12 +22,6 @@ export function useSettingsSync() {
             if (event.payload.language !== undefined && event.payload.language !== i18n.language) {
               i18n.changeLanguage(event.payload.language)
             }
-            
-            if (event.payload.aiTranslationEnabled !== undefined) {
-              const value = event.payload.aiTranslationEnabled
-              localStorage.setItem('tool-state-ai-translation-button', JSON.stringify(value))
-              toolsStore.states['ai-translation-button'] = value
-            }
             if (event.payload.pasteWithFormat !== undefined) {
               const value = event.payload.pasteWithFormat
               localStorage.setItem('tool-state-format-toggle-button', JSON.stringify(value))

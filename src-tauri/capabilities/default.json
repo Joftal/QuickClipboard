@@ -18,7 +18,6 @@
         }
       ]
     },
-    "notification:default",
     "autostart:default",
     "autostart:allow-enable",
     "autostart:allow-disable",
@@ -46,7 +45,6 @@
           "url": "https://api.github.com/**"
         }
       ]
-    },
-    "screenshot-suite:default"
+    }
   ]
 }

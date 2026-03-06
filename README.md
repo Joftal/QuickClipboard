@@ -35,7 +35,7 @@
 
 - 支持文本、图片、文件多类型记录  
 - 智能分组、收藏与搜索  
-- 截屏、收藏、预览、快速粘贴多合一  
+- 收藏、预览、快速粘贴多合一  
 - 极简 UI · 高度可定制 · 一键唤醒
 
 ---
@@ -51,7 +51,7 @@
   </tr>
   <tr>
     <td align="center" width="160"><strong>🪟 视觉体验</strong><br>现代化界面、细节打磨、流畅动画</td>
-    <td align="center" width="160"><strong>📸 截图整合</strong><br>一键截图、OCR、多显示器支持</td>
+    <td align="center" width="160"><strong>🧠 智能辅助</strong><br>快速粘贴、快捷键联动、效率增强</td>
     <td align="center" width="160"><strong>💾 数据安全</strong><br>SQLite 持久化，支持导入/导出</td>
   </tr>
 </table>
@@ -197,25 +197,10 @@ npm run tauri dev
 
 # 构建发行版
 npm run tauri:build
-
-# 社区版开发模式（不含私有插件）
-npm run tauri:dev:community
-
-# 社区版构建（不含私有插件）
-npm run tauri:build:community
 ```
-
-### ⚠️ 关于私有组件
-
-本项目的**官方发布版**包含以下私有插件（不在开源范围内）：
-
-- `gpu-image-viewer`（GPU 加速图片窗口）：提升贴图和图片预览性能，在拥有多个贴图窗口情况下显著降低内存占用。
-- `screenshot-suite`（截屏套件）：包含自由截屏、截屏贴图、截屏OCR、长截图等相关能力。
 
 ---
 
 ## 📜 许可证
 
  本项目基于 [Apache License 2.0](LICENSE) 开源。
-
-> 私有插件 `gpu-image-viewer`、`screenshot-suite` 不在开源范围内，仅官方发布版包含。

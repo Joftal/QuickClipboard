@@ -165,12 +165,6 @@ pub async fn show_tray_menu(app: AppHandle) -> Result<(), String> {
         menu_item_with_state("toggle", "显示/隐藏", Some("ti ti-app-window"), is_force_update),
         separator_item(),
         menu_item_with_state("settings", "设置", Some("ti ti-settings"), is_force_update),
-        menu_item_with_state(
-            "screenshot",
-            "截屏",
-            Some("ti ti-screenshot"),
-            is_force_update || !settings.screenshot_enabled,
-        ),
         CtxMenuItem {
             id: "pin-images".to_string(),
             label: "贴图".to_string(),
@@ -234,7 +228,7 @@ pub async fn show_tray_menu(app: AppHandle) -> Result<(), String> {
     ];
     
     let (cursor_x, cursor_y) = crate::mouse::get_cursor_position();
-    let theme = if settings.theme.is_empty() { "auto".to_string() } else { settings.theme };
+    let theme = if settings.theme == "dark" { "dark".to_string() } else { "light".to_string() };
     
     let (logical_x, logical_y) = if let Ok(monitor) = crate::screen::ScreenUtils::get_monitor_at_cursor(&app) {
         let scale = monitor.scale_factor();
@@ -298,24 +292,8 @@ fn handle_tray_menu_selection(app: &AppHandle, selected_id: &str) {
         "settings" => {
             let _ = crate::windows::settings_window::open_settings_window(app);
         }
-        "screenshot" => {
-            let app = app.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(150));
-                #[cfg(feature = "screenshot-suite")]
-                {
-                    if let Err(e) = screenshot_suite::start_screenshot(&app) {
-                        eprintln!("启动截图窗口失败: {}", e);
-                    }
-                }
-                #[cfg(not(feature = "screenshot-suite"))]
-                {
-                    let _ = app;
-                }
-            });
-        }
         "toggle-hotkeys" => {
-            toggle_hotkeys(app);
+            toggle_hotkeys();
         }
         "toggle-clipboard-monitor" => {
             if let Err(e) = crate::commands::settings::toggle_clipboard_monitor(app) {
@@ -343,29 +321,13 @@ fn handle_tray_menu_selection(app: &AppHandle, selected_id: &str) {
                     if let Some((_, file_path)) = images.get(idx) {
                         let app = app.clone();
                         let file_path = file_path.clone();
-                        #[cfg(feature = "gpu-image-viewer")]
-                        if let Err(e) = crate::windows::native_pin_window::create_native_pin_from_file(
-                            app.clone(), file_path.clone(),
-                        ) {
-                            eprintln!("原生贴图窗口失败，尝试tauri版: {}", e);
-                            tauri::async_runtime::spawn(async move {
-                                if let Err(e2) = crate::windows::pin_image_window::pin_image_from_file(
-                                    app, file_path, None, None, None, None, None, None, None, None, None, None, None,
-                                ).await {
-                                    eprintln!("tauri版贴图窗口也失败: {}", e2);
-                                }
-                            });
-                        }
-                        #[cfg(not(feature = "gpu-image-viewer"))]
-                        {
-                            tauri::async_runtime::spawn(async move {
-                                if let Err(e) = crate::windows::pin_image_window::pin_image_from_file(
-                                    app, file_path, None, None, None, None, None, None, None, None, None, None, None,
-                                ).await {
-                                    eprintln!("创建贴图窗口失败: {}", e);
-                                }
-                            });
-                        }
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(e) = crate::windows::pin_image_window::pin_image_from_file(
+                                app, file_path, None, None, None, None, None, None, None, None, None, None, None,
+                            ).await {
+                                eprintln!("创建贴图窗口失败: {}", e);
+                            }
+                        });
                     }
                 }
             }
@@ -375,26 +337,23 @@ fn handle_tray_menu_selection(app: &AppHandle, selected_id: &str) {
 }
 
 // 切换快捷键状态
-fn toggle_hotkeys(app: &AppHandle) {
+fn toggle_hotkeys() {
     let mut settings = crate::get_settings();
     settings.hotkeys_enabled = !settings.hotkeys_enabled;
-    let enabled = settings.hotkeys_enabled;
+    let hotkeys_enabled = settings.hotkeys_enabled;
     
     if let Err(e) = crate::update_settings(settings.clone()) {
         eprintln!("更新快捷键设置失败: {}", e);
         return;
     }
     
-    if enabled {
+    if hotkeys_enabled {
         if let Err(e) = crate::hotkey::reload_from_settings() {
             eprintln!("重新加载快捷键失败: {}", e);
         }
     } else {
         crate::hotkey::unregister_all();
     }
-
-    let message = if enabled { "快捷键已启用" } else { "快捷键已禁用" };
-    let _ = crate::services::notification::show_notification(app, "QuickClipboard", message);
 }
 
 // 打开贴图目录

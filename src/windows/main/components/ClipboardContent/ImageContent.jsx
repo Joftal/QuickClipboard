@@ -19,7 +19,6 @@ function ImageContent({
   const { t } = useTranslation();
   
   const handleDragStart = useCallback(() => {
-    invoke('close_native_image_preview').catch(() => {});
     invoke('close_image_preview').catch(() => {});
   }, []);
 

@@ -11,7 +11,6 @@ import { openUrl } from '@tauri-apps/plugin-opener'
 import '@shared/i18n';
 import { useTranslation } from 'react-i18next'
 import '@shared/styles/index.css'
-import '@shared/styles/theme-background.css'
 import { initStores } from '@shared/store'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import logoIcon from '@/assets/icon1024.png';

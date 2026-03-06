@@ -1,6 +1,7 @@
 // WebView2 环境变量安全检查
 
 // 危险参数列表：(参数模式, 描述)
+#[cfg(all(not(debug_assertions), windows))]
 const DANGEROUS_PATTERNS: &[(&str, &str)] = &[
     // DevTools 相关
     ("--auto-open-devtools-for-tabs", "自动打开开发者工具"),
@@ -24,6 +25,7 @@ const DANGEROUS_PATTERNS: &[(&str, &str)] = &[
 ];
 
 // 检查 WebView2 环境变量中是否包含危险参数
+#[cfg(all(not(debug_assertions), windows))]
 fn check_dangerous_webview2_args() -> Option<String> {
     let args = std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").ok()?;
     let args_lower = args.to_lowercase();
@@ -45,7 +47,7 @@ fn check_dangerous_webview2_args() -> Option<String> {
 }
 
 // 显示安全警告对话框
-#[cfg(windows)]
+#[cfg(all(not(debug_assertions), windows))]
 fn show_security_warning(warning: &str) {
     use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_OK, MB_ICONWARNING};
     use windows::core::PCWSTR;

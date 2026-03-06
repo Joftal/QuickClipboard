@@ -16,6 +16,7 @@ pub fn disable_win_v_hotkey() -> Result<(), String> {
 }
 
 #[cfg(windows)]
+#[allow(dead_code)]
 pub fn disable_win_v_hotkey_silent() -> Result<(), String> {
     add_disabled_hotkey('V', false)
 }
@@ -26,6 +27,7 @@ pub fn enable_win_v_hotkey() -> Result<(), String> {
 }
 
 #[cfg(windows)]
+#[allow(dead_code)]
 pub fn enable_win_v_hotkey_silent() -> Result<(), String> {
     remove_disabled_hotkey('V', false)
 }
@@ -129,10 +131,12 @@ pub fn is_win_v_hotkey_disabled() -> bool {
 #[cfg(not(windows))]
 pub fn disable_win_v_hotkey() -> Result<(), String> { Ok(()) }
 #[cfg(not(windows))]
+#[allow(dead_code)]
 pub fn disable_win_v_hotkey_silent() -> Result<(), String> { Ok(()) }
 #[cfg(not(windows))]
 pub fn enable_win_v_hotkey() -> Result<(), String> { Ok(()) }
 #[cfg(not(windows))]
+#[allow(dead_code)]
 pub fn enable_win_v_hotkey_silent() -> Result<(), String> { Ok(()) }
 #[cfg(not(windows))]
 pub fn is_win_v_hotkey_disabled() -> bool { false }

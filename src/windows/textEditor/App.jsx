@@ -38,14 +38,12 @@ function App() {
   useEffect(() => {
     const init = async () => {
       await initSettings();
-      const editorTheme = settingsStore.theme === 'background' ? 'light' : settingsStore.theme;
-      applyThemeToBody(editorTheme, 'text-editor');
+      applyThemeToBody(settingsStore.theme, 'text-editor');
     };
     init();
   }, []);
   useEffect(() => {
-    const editorTheme = theme === 'background' ? 'light' : theme;
-    applyThemeToBody(editorTheme, 'text-editor');
+    applyThemeToBody(theme, 'text-editor');
   }, [theme, effectiveTheme]);
 
   // 加载分组列表

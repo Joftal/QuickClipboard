@@ -16,7 +16,6 @@ export const defaultSettings = {
   autoStart: false,
   runAsAdmin: false,
   startHidden: false,
-  showStartupNotification: true,
   historyLimit: 100,
   language: 'zh-CN',
   
@@ -24,14 +23,12 @@ export const defaultSettings = {
   theme: 'light',
   darkThemeStyle: 'classic',
   opacity: 0.9,
-  backgroundImagePath: '',
   clipboardAnimationEnabled: true,
   uiAnimationEnabled: true,
   
   // 快捷键设置
   toggleShortcut: 'Shift+Space',
   quickpasteShortcut: 'Ctrl+`',
-  screenshotShortcut: 'Ctrl+Shift+A',
   numberShortcuts: true,
   numberShortcutsModifier: 'Ctrl',
   
@@ -70,14 +67,6 @@ export const defaultSettings = {
   pasteToTop: false,
   showBadges: true,
   showSourceIcon: true,
-  
-  // 音效设置
-  soundEnabled: true,
-  soundVolume: 50,
-  copySoundPath: '',
-  pasteSoundPath: '',
-  copySoundTiming: 'immediate',  
-  pasteSoundTiming: 'immediate', 
 
   // 图片显示限制
   imageMaxSizeMb: 15,
@@ -87,37 +76,6 @@ export const defaultSettings = {
   // 便捷粘贴设置
   quickpasteEnabled: true,
   quickpastePasteOnModifierRelease: false,
-  quickpasteScrollSound: true,
-  quickpasteScrollSoundPath: 'sounds/roll.mp3',
-  
-  // 截屏设置
-  screenshotEnabled: true,
-  screenshotShortcut: 'Ctrl+Shift+A',
-  screenshotQuickSaveShortcut: '',
-  screenshotQuickPinShortcut: '',
-  screenshotQuickOcrShortcut: '',
-  screenshotQuality: 85,
-  screenshotAutoSave: false,
-  screenshotShowHints: true,
-  screenshotElementDetection: 'all',
-  screenshotMagnifierEnabled: true,
-  screenshotHintsEnabled: true,
-  screenshotColorIncludeFormat: true,
-  screenshotWindowLifecycleMode: 'quick',
-  screenshotAutoDisposeMinutes: 10,
-  
-  // AI 配置
-  aiTranslationEnabled: false,
-  aiApiKey: '',
-  aiModel: 'Qwen/Qwen2-7B-Instruct',
-  aiBaseUrl: 'https://api.siliconflow.cn/v1',
-  aiTargetLanguage: 'auto',
-  aiTranslateOnCopy: false,
-  aiTranslateOnPaste: true,
-  aiTranslationPrompt: '请将以下文本翻译成{target_language}，严格保持原文的所有格式、换行符、段落结构和空白字符，只返回翻译结果，不要添加任何解释或修改格式：',
-  aiInputSpeed: 50,
-  aiNewlineMode: 'auto',
-  aiOutputMode: 'stream',
   
   // 鼠标设置
   mouseMiddleButtonEnabled: false,
@@ -144,10 +102,7 @@ export const defaultSettings = {
 export async function loadSettingsFromBackend() {
   try {
     const savedSettings = await reloadSettings()
-
-    const mergedSettings = { ...defaultSettings, ...savedSettings }
-    
-    return mergedSettings
+    return { ...defaultSettings, ...savedSettings }
   } catch (error) {
     console.error('加载设置失败:', error)
     return { ...defaultSettings }

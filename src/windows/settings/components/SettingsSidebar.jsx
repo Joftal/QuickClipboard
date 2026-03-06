@@ -17,21 +17,10 @@ export const navigationItems = [{
   id: 'clipboard',
   icon: "ti ti-clipboard",
   labelKey: 'settings.sections.clipboard'
-},
-// { id: 'aiConfig', icon:"ti ti-brain", labelKey: 'settings.sections.aiConfig' },
-// { id: 'translation', icon:"ti ti-language", labelKey: 'settings.sections.translation' },
-{
+}, {
   id: 'quickpaste',
   icon: "ti ti-clipboard-check",
   labelKey: 'settings.sections.quickpaste'
-}, {
-  id: 'screenshot',
-  icon: "ti ti-camera",
-  labelKey: 'settings.sections.screenshot'
-}, {
-  id: 'sound',
-  icon: "ti ti-volume",
-  labelKey: 'settings.sections.sound'
 }, {
   id: 'appFilter',
   icon: "ti ti-filter",
@@ -40,10 +29,6 @@ export const navigationItems = [{
   id: 'dataManagement',
   icon: "ti ti-database",
   labelKey: 'settings.sections.dataManagement'
-}, {
-  id: 'about',
-  icon: "ti ti-info-circle",
-  labelKey: 'settings.sections.about'
 }];
 function SettingsSidebar({
   activeSection,

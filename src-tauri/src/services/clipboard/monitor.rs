@@ -118,7 +118,6 @@ fn run_clipboard_monitor(generation: u64) -> Result<(), String> {
 }
 
 fn handle_clipboard_change() -> Result<(), String> {
-    crate::AppSounds::play_copy_immediate();
     // 检查应用过滤
     let settings = crate::services::get_settings();
 
@@ -190,7 +189,6 @@ fn handle_clipboard_change() -> Result<(), String> {
         
         if any_stored {
             let _ = emit_clipboard_updated();
-            crate::AppSounds::play_copy_on_success();
         }
     });
     

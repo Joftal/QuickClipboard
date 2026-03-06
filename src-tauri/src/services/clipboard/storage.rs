@@ -79,7 +79,7 @@ pub fn store_clipboard_item(content: ProcessedContent) -> Result<i64, String> {
 fn check_and_handle_duplicate(
     content: &ProcessedContent,
     conn: &rusqlite::Connection,
-    now: i64,
+    _now: i64,
 ) -> Result<Option<i64>, rusqlite::Error> {
     let mut stmt = conn.prepare(
         "SELECT id, content, content_type 

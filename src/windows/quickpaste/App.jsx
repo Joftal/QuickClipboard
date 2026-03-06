@@ -13,7 +13,6 @@ import { useTheme, applyThemeToBody } from '@shared/hooks/useTheme';
 import { useSettingsSync } from '@shared/hooks/useSettingsSync';
 import { ImageContent, FileContent, HtmlContent, TextContent } from '@windows/main/components/ClipboardContent';
 import { getPrimaryType } from '@shared/utils/contentType';
-import { playScrollSound } from '@shared/api';
 
 const ITEM_HEIGHT = 52;
 const ITEM_PADDING = 8;
@@ -179,7 +178,6 @@ function QuickPasteWindow() {
   useEffect(() => {
     const handleWheel = (e) => {
       e.preventDefault();
-      playScrollSound();
       setActiveIndex(prev => {
         const max = totalCount - 1;
         return e.deltaY > 0
@@ -194,7 +192,6 @@ function QuickPasteWindow() {
 
   useEffect(() => {
     const unlisten = listen('quickpaste-next', () => {
-      playScrollSound();
       setActiveIndex(prev => {
         const max = totalCount - 1;
         return prev < max ? prev + 1 : 0;

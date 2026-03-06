@@ -1,11 +1,6 @@
 import {
   setWindowPinned,
-  openSettingsWindow,
-  startScreenshot,
-  hideMainWindow,
-  checkAiTranslationConfig,
-  enableAiTranslationCancelShortcut,
-  disableAiTranslationCancelShortcut
+  openSettingsWindow
 } from '@shared/api'
 
 // 不持久化的临时工具状态
@@ -16,7 +11,6 @@ const temporaryStates = {}
 
 // 配置文件工具
 const configFileTools = {
-  'ai-translation-button': { key: 'aiTranslationEnabled', default: false },
   'format-toggle-button': { key: 'pasteWithFormat', default: true }
 }
 
@@ -104,24 +98,6 @@ export const toolActions = {
     }
   },
   
-  // 截图
-  'screenshot-button': async () => {
-    try {
-      const { settingsStore } = await import('@shared/store/settingsStore')
-      const animationEnabled = settingsStore.clipboardAnimationEnabled
-      
-      await hideMainWindow()
-      
-      const waitTime = animationEnabled ? 170 : 50
-      await new Promise(resolve => setTimeout(resolve, waitTime))
-      
-      await startScreenshot()
-    } catch (error) {
-      console.error('启动截图失败:', error)
-      throw error
-    }
-  },
-  
   // 一次性粘贴
   'one-time-paste-button': async () => {
     const currentState = getToolState('one-time-paste-button')
@@ -133,44 +109,6 @@ export const toolActions = {
     }))
     
     return newState
-  },
-  
-  // AI翻译
-  'ai-translation-button': async () => {
-    const currentState = getToolState('ai-translation-button')
-    const newState = !currentState
-    
-    try {
-      // 检查AI翻译配置
-      const hasConfig = await checkAiTranslationConfig()
-      if (!hasConfig && newState) {
-        console.warn('AI翻译未配置')
-      }
-      
-      // 保存到配置文件
-      const { settingsStore } = await import('@shared/store/settingsStore')
-      await settingsStore.saveSetting('aiTranslationEnabled', newState, { showToast: false })
-      
-      // 同步到 localStorage 缓存
-      setToolState('ai-translation-button', newState)
-      
-      // 启用/禁用快捷键
-      if (newState) {
-        await enableAiTranslationCancelShortcut()
-      } else {
-        await disableAiTranslationCancelShortcut()
-      }
-      
-      // 触发自定义事件
-      window.dispatchEvent(new CustomEvent('ai-translation-changed', {
-        detail: { enabled: newState }
-      }))
-      
-      return newState
-    } catch (error) {
-      console.error('切换AI翻译失败:', error)
-      throw error
-    }
   },
   
   // 格式切换

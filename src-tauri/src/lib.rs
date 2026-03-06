@@ -10,7 +10,7 @@ mod utils;
 mod windows;
 
 pub use utils::{mouse, screen};
-pub use services::{AppSettings, get_settings, update_settings, get_data_directory, hotkey, SoundPlayer, AppSounds};
+pub use services::{AppSettings, get_settings, update_settings, get_data_directory, hotkey};
 pub use services::system::input_monitor;
 pub use services::system::focus;
 pub use services::clipboard::{
@@ -84,7 +84,6 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -92,12 +91,6 @@ pub fn run() {
         .plugin(tauri_plugin_drag::init())
         .plugin(tauri_plugin_store::Builder::new().build());
     
-    #[cfg(feature = "gpu-image-viewer")]
-    let builder = builder.plugin(gpu_image_viewer::init());
-
-    #[cfg(feature = "screenshot-suite")]
-    let builder = builder.plugin(screenshot_suite::init());
-        
     builder.invoke_handler(tauri::generate_handler![
                 commands::start_custom_drag,
                 commands::stop_custom_drag,
@@ -188,9 +181,6 @@ pub fn run() {
                 commands::set_mouse_position,
                 commands::get_mouse_position,
                 commands::copy_text_to_clipboard,
-                commands::check_ai_translation_config,
-                commands::enable_ai_translation_cancel_shortcut,
-                commands::disable_ai_translation_cancel_shortcut,
                 commands::check_win_v_hotkey_disabled,
                 commands::disable_win_v_hotkey_and_restart,
                 commands::enable_win_v_hotkey_and_restart,
@@ -199,11 +189,6 @@ pub fn run() {
                 commands::enter_low_memory_mode,
                 commands::exit_low_memory_mode,
                 commands::is_low_memory_mode,
-                commands::play_sound,
-                commands::play_beep,
-                commands::play_copy_sound,
-                commands::play_paste_sound,
-                commands::play_scroll_sound,
                 commands::get_app_links_cmd,
                 commands::reload_all_windows,
                 commands::check_updates_and_open_window,
@@ -222,7 +207,6 @@ pub fn run() {
                 windows::pin_image_window::close_pin_image_window_by_self,
                 windows::pin_image_window::close_image_preview,
                 windows::pin_image_window::save_pin_image_as,
-                windows::pin_image_window::start_pin_edit_mode,
                 utils::screen::get_all_screens,
                 utils::system::get_system_text_scale,
                 commands::il_init,
@@ -235,18 +219,6 @@ pub fn run() {
                 commands::il_get_gifs_dir,
                 commands::recognize_image_ocr,
                 commands::recognize_file_ocr,
-                #[cfg(feature = "gpu-image-viewer")]
-                windows::native_pin_window::create_native_pin_window,
-                #[cfg(feature = "gpu-image-viewer")]
-                windows::native_pin_window::confirm_native_pin_edit,
-                #[cfg(feature = "gpu-image-viewer")]
-                windows::native_pin_window::cancel_native_pin_edit,
-                #[cfg(feature = "gpu-image-viewer")]
-                windows::native_pin_window::show_native_image_preview,
-                #[cfg(feature = "gpu-image-viewer")]
-                windows::native_pin_window::close_native_image_preview,
-                #[cfg(feature = "gpu-image-viewer")]
-                windows::native_pin_window::create_native_pin_from_file,
             ])
         
     .setup(|app| {
@@ -259,9 +231,6 @@ pub fn run() {
                 
                 let window = app.get_webview_window("main").ok_or("无法获取主窗口")?;
                 let _ = window.set_focusable(false);
-                #[cfg(debug_assertions)]
-                let _ = window.open_devtools();
-                
                 if services::is_portable_build() {
                     if let Ok(exe) = std::env::current_exe() {
                         if let Some(dir) = exe.parent() {
@@ -319,26 +288,13 @@ pub fn run() {
                 set_clipboard_app_handle(app.handle().clone());
 
                 windows::pin_image_window::init_pin_image_window();
-                #[cfg(feature = "gpu-image-viewer")]
-                windows::native_pin_window::setup_event_listener(app.handle());
                 focus::start_focus_listener(app.handle().clone());
-
-                #[cfg(feature = "screenshot-suite")]
-                {
-                    if let Ok(json) = serde_json::to_value(&settings) {
-                        screenshot_suite::config::update_config(json);
-                    }
-                }
 
                 if settings.clipboard_monitor {
                     let _ = start_clipboard_monitor();
                 }
                 
                 let _ = windows::main_window::restore_edge_snap_on_startup(&window);
-
-                if settings.show_startup_notification {
-                    let _ = services::show_startup_notification(app.handle());
-                }
 
                 windows::updater_window::start_update_checker(app.handle().clone());
 

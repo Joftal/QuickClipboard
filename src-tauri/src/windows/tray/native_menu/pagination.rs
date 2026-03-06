@@ -69,9 +69,7 @@ pub fn scroll_page(delta: i32) -> bool {
     
     state::set_current_page(new_page);
     let _ = update_clipboard_items_text();
-    
-    crate::AppSounds::play_scroll();
-    
+
     true
 }
 

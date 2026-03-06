@@ -22,8 +22,6 @@ fn emit_favorite_paste_count_updated(id: &str) {
 // 直接粘贴文本
 pub fn paste_text_direct(text: &str) -> Result<(), String> {
     crate::services::clipboard::set_last_hash_text(text);
-
-    crate::services::mark_paste_operation();
     
     let ctx = ClipboardContext::new()
         .map_err(|e| format!("创建剪贴板上下文失败: {}", e))?;
@@ -33,7 +31,6 @@ pub fn paste_text_direct(text: &str) -> Result<(), String> {
     std::thread::sleep(std::time::Duration::from_millis(50));
     simulate_paste()?;
     std::thread::sleep(std::time::Duration::from_millis(100));
-    crate::AppSounds::play_paste_on_success();
     Ok(())
 }
 
@@ -48,8 +45,6 @@ pub fn paste_image_file(file_path: &str) -> Result<(), String> {
     }
     
     crate::services::clipboard::set_last_hash_file(file_path);
-    crate::services::mark_paste_operation();
-    
     let ctx = ClipboardContext::new()
         .map_err(|e| format!("创建剪贴板上下文失败: {}", e))?;
     
@@ -58,12 +53,12 @@ pub fn paste_image_file(file_path: &str) -> Result<(), String> {
     std::thread::sleep(std::time::Duration::from_millis(50));
     simulate_paste()?;
     std::thread::sleep(std::time::Duration::from_millis(100));
-    crate::AppSounds::play_paste_on_success();
     
     Ok(())
 }
 
 // 粘贴剪贴板项
+#[allow(dead_code)]
 pub fn paste_clipboard_item(item: &ClipboardItem) -> Result<(), String> {
     paste_item_internal(item, None, None, None)
 }
@@ -142,8 +137,6 @@ fn paste_item_internal(
         },
         _ => {}
     }
-    crate::services::mark_paste_operation();
-    
     // 设置剪贴板
     let ctx = ClipboardContext::new()
         .map_err(|e| format!("创建剪贴板上下文失败: {}", e))?;
@@ -163,7 +156,6 @@ fn paste_item_internal(
     std::thread::sleep(std::time::Duration::from_millis(50));
     simulate_paste()?;
     std::thread::sleep(std::time::Duration::from_millis(100));
-    crate::AppSounds::play_paste_on_success();
     
     Ok(())
 }

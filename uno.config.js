@@ -9,7 +9,6 @@ export default defineConfig({
         './shared/**/*.{html,js,jsx,ts,tsx}',
         './index.html',
         './src/**/*.{html,js,jsx,ts,tsx}',
-        '../src-tauri/plugins/screenshot-suite/web/windows/**/*.{html,js,jsx,ts,tsx}',
       ],
     },
   },
@@ -29,10 +28,6 @@ export default defineConfig({
     'input': 'px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500',
     'bg-glass': 'bg-bg-glass-100 backdrop-blur-sm',
     'bg-glass-card': 'bg-bg-glass-200 backdrop-blur-xs border border-white/20',
-    'bg-titlebar-dynamic': 'bg-bg-titlebar-bg text-bg-titlebar-text border-bg-titlebar-border',
-    'text-dynamic': 'text-bg-dynamic-primary',
-    'bg-dynamic': 'bg-bg-dynamic-primary',
-    'hover-dynamic': 'hover:bg-bg-dynamic-hover',
   },
   theme: {
     colors: {
@@ -81,11 +76,6 @@ export default defineConfig({
         900: '#1e3a8a',
       },
       bg: {
-        titlebar: {
-          bg: 'var(--bg-titlebar-bg, rgba(240, 240, 240, 0.9))',
-          text: 'var(--bg-titlebar-text, #666666)',
-          border: 'var(--bg-titlebar-border, rgba(232, 233, 234, 0.8))',
-        },
         glass: {
           50: 'rgba(255, 255, 255, 0.5)',
           100: 'rgba(255, 255, 255, 0.68)',
@@ -94,13 +84,6 @@ export default defineConfig({
           400: 'rgba(209, 213, 219, 0.68)',
           600: 'rgba(75, 85, 99, 0.68)',
           800: 'rgba(31, 41, 55, 0.68)',
-        },
-        // 动态主题色
-        dynamic: {
-          primary: 'var(--bg-dynamic-primary, #4a89dc)',
-          hover: 'var(--bg-dynamic-hover, #3570b8)',
-          light: 'var(--bg-dynamic-light, #e6f7ff)',
-          dark: 'var(--bg-dynamic-dark, #3b7ac9)',
         },
       },
     },
@@ -161,9 +144,6 @@ export default defineConfig({
     'opacity-0', 'group-hover:opacity-100',
     'hover:bg-blue-500/10',
     'bg-bg-glass-50', 'bg-bg-glass-100', 'bg-bg-glass-200', 'bg-bg-glass-300', 'bg-bg-glass-400', 'bg-bg-glass-600', 'bg-bg-glass-800',
-    'bg-bg-titlebar-bg', 'text-bg-titlebar-text', 'border-bg-titlebar-border',
-    'bg-bg-dynamic-primary', 'bg-bg-dynamic-hover', 'bg-bg-dynamic-light', 'bg-bg-dynamic-dark',
-    'text-bg-dynamic-primary', 'hover:bg-bg-dynamic-hover',
     'backdrop-blur-xs', 'backdrop-blur-sm', 'backdrop-blur-md',
     'inset-0', 'relative',
   ],

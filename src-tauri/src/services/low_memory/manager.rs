@@ -8,7 +8,6 @@ const WEBVIEW_LABELS: &[&str] = &[
     "context-menu",
     "settings",
     "text-editor",
-    "screenshot",
     "updater",
 ];
 
@@ -39,12 +38,6 @@ pub fn enter_low_memory_mode(app: &AppHandle) -> Result<(), String> {
     // 清理内存
     crate::services::memory::cleanup_memory();
     
-    let _ = crate::services::notification::show_notification(
-        app,
-        "低占用模式",
-        "已进入低占用模式，所有窗口已关闭。\n使用托盘菜单或使用快捷键可恢复。",
-    );
-    
     println!("[低占用模式] 已进入");
     Ok(())
 }
@@ -56,12 +49,6 @@ pub fn exit_low_memory_mode(app: &AppHandle) -> Result<(), String> {
     }
 
     set_low_memory_mode(false);
-
-    let _ = crate::services::notification::show_notification(
-        app,
-        "低占用模式",
-        "已退出低占用模式，主窗口已恢复。",
-    );
 
     crate::windows::tray::switch_to_webview_menu(app)?;
 
@@ -131,9 +118,6 @@ fn recreate_main_window(app: &AppHandle) -> Result<(), String> {
     
     let _ = window.set_focusable(false);
     
-    #[cfg(debug_assertions)]
-    let _ = window.open_devtools();
-
     crate::input_monitor::update_main_window(window.clone());
 
     crate::init_edge_monitor(window.clone());

@@ -12,7 +12,6 @@ import { useTheme, applyThemeToBody } from '@shared/hooks/useTheme';
 import { useSettingsSync } from '@shared/hooks/useSettingsSync';
 import { useNavigationKeyboard } from '@shared/hooks/useNavigationKeyboard';
 import { useWindowAnimation } from '@shared/hooks/useWindowAnimation';
-import { applyBackgroundImage, clearBackgroundImage } from '@shared/utils/backgroundManager';
 import { promptDisableWinVHotkeyIfNeeded } from '@shared/api/system';
 import TitleBar from './components/TitleBar';
 import TabNavigation from './components/TabNavigation';
@@ -29,14 +28,11 @@ function App() {
   } = useTranslation();
   const settings = useSnapshot(settingsStore);
   const {
-    theme,
-    darkThemeStyle,
-    backgroundImagePath
+    theme
   } = settings;
   const {
     effectiveTheme,
-    isDark,
-    isBackground
+    isDark
   } = useTheme();
   const [activeTab, setActiveTab] = useState('clipboard');
   const [contentFilter, setContentFilter] = useState('all');
@@ -192,19 +188,6 @@ function App() {
   useEffect(() => {
     applyThemeToBody(theme, 'main');
   }, [theme, effectiveTheme]);
-
-  // 应用背景图片（仅在背景主题时）
-  useEffect(() => {
-    if (isBackground && backgroundImagePath) {
-      applyBackgroundImage({
-        containerSelector: '.main-container',
-        backgroundImagePath,
-        windowName: 'main'
-      });
-    } else {
-      clearBackgroundImage('.main-container');
-    }
-  }, [isBackground, backgroundImagePath]);
 
   // 处理分组切换
   const handleGroupChange = async groupName => {

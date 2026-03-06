@@ -23,6 +23,7 @@ impl ContentType {
         self.types.join(",")
     }
 
+    #[allow(dead_code)]
     pub fn from_db_string(s: &str) -> Self {
         let types: Vec<String> = s.split(',')
             .map(|t| t.trim().to_string())
@@ -36,15 +37,17 @@ impl ContentType {
         }
     }
     
-
+    #[allow(dead_code)]
     pub fn primary(&self) -> &str {
         self.types.first().map(|s| s.as_str()).unwrap_or("text")
     }
 
+    #[allow(dead_code)]
     pub fn has_type(&self, type_name: &str) -> bool {
         self.types.iter().any(|t| t == type_name)
     }
 
+    #[allow(dead_code)]
     pub fn matches_filter(&self, filter: &str) -> bool {
         if filter == "all" {
             return true;

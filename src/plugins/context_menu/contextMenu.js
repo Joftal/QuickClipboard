@@ -6,14 +6,12 @@ document.addEventListener('contextmenu', e => e.preventDefault());
 
 const currentWindow = getCurrentWindow();
 const menuContainer = document.getElementById('menuContainer');
-const systemThemeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
 const TRAY_BOTTOM_MARGIN = 50;
 const BODY_PADDING = 8;
 const SHADOW_MARGIN = 5;
 const MAX_SPACE = 210;
 
-let currentThemeSetting = null;
 let monitorInfo = { x: 0, y: 0, width: 1920, height: 1080 };
 let windowOrigin = { x: 0, y: 0 };
 let scaleFactor = 1;
@@ -24,16 +22,9 @@ const cssToLogical = v => v * textScale;
 const logicalToCss = v => v / textScale;
 
 function applyTheme(theme) {
-    currentThemeSetting = theme;
-    const isDark = theme === 'dark' || (theme !== 'light' && systemThemeMediaQuery.matches);
+    const isDark = theme === 'dark';
     document.body.classList.toggle('dark-theme', isDark);
 }
-
-systemThemeMediaQuery.addEventListener('change', e => {
-    if (!currentThemeSetting || currentThemeSetting === 'auto') {
-        document.body.classList.toggle('dark-theme', e.matches);
-    }
-});
 
 function updateScrollIndicator(el) {
     if (el) el.classList.toggle('has-scroll', el.scrollHeight > el.clientHeight);
@@ -238,18 +229,11 @@ function createMenuItem(item) {
         let timer = null;
         menuItem.addEventListener('mouseenter', () => {
             timer = setTimeout(async () => {
-                try {
-                    await invoke('show_native_image_preview', { filePath: item.preview_image });
-                } catch (nativeError) {
-                    if (nativeError?.toString?.()?.includes('not found') || nativeError?.toString?.()?.includes('Command')) {
-                        invoke('pin_image_from_file', { filePath: item.preview_image, previewMode: true }).catch(() => {});
-                    }
-                }
+                invoke('pin_image_from_file', { filePath: item.preview_image, previewMode: true }).catch(() => {});
             }, 300);
         });
         menuItem.addEventListener('mouseleave', () => {
             if (timer) { clearTimeout(timer); timer = null; }
-            invoke('close_native_image_preview').catch(() => {});
             invoke('close_image_preview').catch(() => {});
         });
     }

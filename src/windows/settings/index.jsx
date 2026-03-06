@@ -2,7 +2,6 @@ import ReactDOM from 'react-dom/client';
 import 'uno.css';
 import '@unocss/reset/tailwind.css';
 import '@shared/styles/index.css';
-import '@shared/styles/theme-background.css';
 import '@shared/i18n';
 import { initStores } from '@shared/store';
 import App from './App';
