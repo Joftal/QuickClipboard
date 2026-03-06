@@ -8,6 +8,46 @@ use crate::services::database::{init_database};
 use crate::services::database::connection::{close_database, with_connection};
 use crate::services::system::hotkey::reload_from_settings;
 
+fn safe_zip_entry_output_path(
+    file: &zip::read::ZipFile<'_>,
+    temp_root: &Path,
+) -> Result<PathBuf, String> {
+    let enclosed = file
+        .enclosed_name()
+        .ok_or_else(|| format!("ZIP 条目路径非法: {}", file.name()))?;
+
+    let out_path = temp_root.join(enclosed);
+    if !out_path.starts_with(temp_root) {
+        return Err(format!("ZIP 条目超出临时目录范围: {}", file.name()));
+    }
+
+    Ok(out_path)
+}
+
+fn extract_import_archive<R: std::io::Read + std::io::Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    temp_root: &Path,
+) -> Result<(), String> {
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i).map_err(|e| e.to_string())?;
+        let out_path = safe_zip_entry_output_path(&file, temp_root)?;
+
+        if file.is_dir() {
+            fs::create_dir_all(&out_path).map_err(|e| e.to_string())?;
+            continue;
+        }
+
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+
+        let mut out = fs::File::create(&out_path).map_err(|e| e.to_string())?;
+        std::io::copy(&mut file, &mut out).map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct TargetDataInfo {
     pub has_data: bool,
@@ -288,19 +328,7 @@ pub fn import_data_zip(zip_path: PathBuf, mode: &str) -> Result<String, String> 
     fs::create_dir_all(&temp_root).map_err(|e| e.to_string())?;
     let file = fs::File::open(&zip_path).map_err(|e| format!("打开导入文件失败: {}", e))?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("读取压缩包失败: {}", e))?;
-    for i in 0..archive.len() {
-        let mut f = archive.by_index(i).map_err(|e| e.to_string())?;
-        let name = f.name().to_string();
-        if name.contains("..") { continue; }
-        let out_path = temp_root.join(&name);
-        if f.is_dir() {
-            fs::create_dir_all(&out_path).map_err(|e| e.to_string())?;
-        } else {
-            if let Some(p) = out_path.parent() { fs::create_dir_all(p).map_err(|e| e.to_string())?; }
-            let mut out = fs::File::create(&out_path).map_err(|e| e.to_string())?;
-            std::io::copy(&mut f, &mut out).map_err(|e| e.to_string())?;
-        }
-    }
+    extract_import_archive(&mut archive, &temp_root)?;
 
     let imported_db = temp_root.join("quickclipboard.db");
     let imported_images = temp_root.join("clipboard_images");
@@ -764,4 +792,89 @@ pub fn export_data_zip(target_path: PathBuf) -> Result<PathBuf, String> {
     }
 
     Ok(target_path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use uuid::Uuid;
+
+    fn with_temp_dir(test: impl FnOnce(&Path)) {
+        let temp_dir = std::env::temp_dir().join(format!("quickclipboard-data-management-test-{}", Uuid::new_v4()));
+        fs::create_dir_all(&temp_dir).expect("create temp dir failed");
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            test(&temp_dir);
+        }));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        if let Err(panic) = result {
+            std::panic::resume_unwind(panic);
+        }
+    }
+
+    fn create_zip_with_entries(zip_path: &Path, entries: &[(&str, &[u8])]) {
+        let file = fs::File::create(zip_path).expect("create zip failed");
+        let mut zip = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+
+        for (name, content) in entries {
+            zip.start_file(name, options).expect("start zip entry failed");
+            zip.write_all(content).expect("write zip entry failed");
+        }
+
+        zip.finish().expect("finish zip failed");
+    }
+
+    #[test]
+    fn safe_zip_entry_output_path_rejects_parent_traversal() {
+        with_temp_dir(|temp_dir| {
+            let zip_path = temp_dir.join("traversal.zip");
+            create_zip_with_entries(&zip_path, &[("../../escape.txt", b"escape")]);
+
+            let file = fs::File::open(&zip_path).expect("open zip failed");
+            let mut archive = zip::ZipArchive::new(file).expect("read zip failed");
+            let file = archive.by_index(0).expect("get zip entry failed");
+
+            let result = safe_zip_entry_output_path(&file, temp_dir);
+            assert!(result.is_err());
+        });
+    }
+
+    #[test]
+    fn extract_import_archive_rejects_absolute_like_path() {
+        with_temp_dir(|temp_dir| {
+            let zip_path = temp_dir.join("absolute.zip");
+            create_zip_with_entries(&zip_path, &[("/absolute.txt", b"absolute")]);
+
+            let file = fs::File::open(&zip_path).expect("open zip failed");
+            let mut archive = zip::ZipArchive::new(file).expect("read zip failed");
+
+            let result = extract_import_archive(&mut archive, temp_dir);
+            assert!(result.is_err());
+            assert!(!temp_dir.join("absolute.txt").exists());
+        });
+    }
+
+    #[test]
+    fn extract_import_archive_keeps_valid_entries_inside_temp_root() {
+        with_temp_dir(|temp_dir| {
+            let zip_path = temp_dir.join("valid.zip");
+            create_zip_with_entries(&zip_path, &[
+                ("quickclipboard.db", b"db"),
+                ("clipboard_images/test.png", b"img"),
+            ]);
+
+            let file = fs::File::open(&zip_path).expect("open zip failed");
+            let mut archive = zip::ZipArchive::new(file).expect("read zip failed");
+
+            extract_import_archive(&mut archive, temp_dir).expect("extract zip failed");
+
+            assert!(temp_dir.join("quickclipboard.db").exists());
+            assert!(temp_dir.join("clipboard_images").join("test.png").exists());
+        });
+    }
 }

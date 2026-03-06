@@ -1,4 +1,4 @@
-use std::{fs, path::{Path, PathBuf}};
+use std::{fs, path::{Component, Path, PathBuf}};
 use std::time::Duration;
 use serde::{Serialize, Deserialize};
 use crate::services::get_data_directory;
@@ -334,6 +334,32 @@ pub fn get_image_count(category: &str) -> Result<usize, String> {
     Ok(count)
 }
 
+fn sanitize_library_filename(filename: &str, field_name: &str) -> Result<String, String> {
+    let trimmed = filename.trim();
+    if trimmed.is_empty() {
+        return Err(format!("{}不能为空", field_name));
+    }
+
+    let mut components = Path::new(trimmed).components();
+    match (components.next(), components.next()) {
+        (Some(Component::Normal(part)), None) => part
+            .to_str()
+            .map(|value| value.to_string())
+            .ok_or_else(|| format!("{}包含无效字符", field_name)),
+        _ => Err(format!("{}包含非法路径", field_name)),
+    }
+}
+
+fn build_library_file_path(dir: &Path, filename: &str, field_name: &str) -> Result<(String, PathBuf), String> {
+    let sanitized = sanitize_library_filename(filename, field_name)?;
+    let path = dir.join(&sanitized);
+
+    match path.parent() {
+        Some(parent) if parent == dir => Ok((sanitized, path)),
+        _ => Err(format!("{}超出图片库目录范围", field_name)),
+    }
+}
+
 // 删除图片
 pub fn delete_image(category: &str, filename: &str) -> Result<(), String> {
     let dir = match category {
@@ -341,7 +367,7 @@ pub fn delete_image(category: &str, filename: &str) -> Result<(), String> {
         _ => get_images_dir()?,
     };
     
-    let file_path = dir.join(filename);
+    let (_, file_path) = build_library_file_path(&dir, filename, "文件名")?;
     
     if file_path.exists() {
         fs::remove_file(&file_path)
@@ -358,23 +384,25 @@ pub fn rename_image(category: &str, old_filename: &str, new_filename: &str) -> R
         _ => get_images_dir()?,
     };
     
-    let old_path = dir.join(old_filename);
+    let (old_name, old_path) = build_library_file_path(&dir, old_filename, "原文件名")?;
     if !old_path.exists() {
-        return Err(format!("文件不存在: {}", old_filename));
+        return Err(format!("文件不存在: {}", old_name));
     }
     
-    let old_ext = std::path::Path::new(old_filename)
+    let old_ext = std::path::Path::new(&old_name)
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("png");
+
+    let sanitized_new_name = sanitize_library_filename(new_filename, "新文件名")?;
     
-    let new_name_with_ext = if new_filename.contains('.') {
-        new_filename.to_string()
+    let new_name_with_ext = if sanitized_new_name.contains('.') {
+        sanitized_new_name
     } else {
-        format!("{}.{}", new_filename, old_ext)
+        format!("{}.{}", sanitized_new_name, old_ext)
     };
     
-    let new_path = dir.join(&new_name_with_ext);
+    let (new_name_with_ext, new_path) = build_library_file_path(&dir, &new_name_with_ext, "新文件名")?;
     
     if new_path.exists() {
         return Err("目标文件名已存在".to_string());
@@ -399,4 +427,74 @@ pub fn rename_image(category: &str, old_filename: &str, new_filename: &str) -> R
         created_at,
         category: category.to_string(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::settings::{get_settings, replace_settings, AppSettings};
+    use once_cell::sync::Lazy;
+    use std::sync::Mutex;
+    use uuid::Uuid;
+
+    static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+    fn with_test_image_library(test: impl FnOnce(PathBuf)) {
+        let _guard = TEST_MUTEX.lock().expect("test mutex poisoned");
+        let original_settings = get_settings();
+        let data_dir = std::env::temp_dir().join(format!("quickclipboard-image-library-test-{}", Uuid::new_v4()));
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let settings = AppSettings {
+                use_custom_storage: true,
+                custom_storage_path: Some(data_dir.to_string_lossy().to_string()),
+                ..AppSettings::default()
+            };
+            replace_settings(settings);
+            init_image_library().expect("init image library failed");
+            test(data_dir.clone());
+        }));
+
+        replace_settings(original_settings);
+        let _ = fs::remove_dir_all(&data_dir);
+
+        if let Err(panic) = result {
+            std::panic::resume_unwind(panic);
+        }
+    }
+
+    #[test]
+    fn sanitize_filename_rejects_path_traversal() {
+        assert!(sanitize_library_filename("../../outside.png", "文件名").is_err());
+        assert!(sanitize_library_filename("nested/file.png", "文件名").is_err());
+        assert!(sanitize_library_filename("", "文件名").is_err());
+        assert_eq!(sanitize_library_filename("safe.png", "文件名").unwrap(), "safe.png");
+    }
+
+    #[test]
+    fn delete_image_rejects_out_of_dir_path() {
+        with_test_image_library(|data_dir| {
+            let outside_path = data_dir.join("outside.png");
+            fs::write(&outside_path, b"outside").expect("write outside file failed");
+
+            let result = delete_image("images", "../../outside.png");
+            assert!(result.is_err());
+            assert!(outside_path.exists());
+        });
+    }
+
+    #[test]
+    fn rename_image_rejects_out_of_dir_target() {
+        with_test_image_library(|data_dir| {
+            let images_dir = get_images_dir().expect("get images dir failed");
+            let source_path = images_dir.join("source.png");
+            let escaped_path = data_dir.join("escaped.png");
+            fs::write(&source_path, b"source").expect("write source file failed");
+
+            let result = rename_image("images", "source.png", "../../escaped");
+            assert!(result.is_err());
+            assert!(source_path.exists());
+            assert!(!escaped_path.exists());
+        });
+    }
 }
