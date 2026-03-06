@@ -50,65 +50,82 @@ mod windows_impl {
     use super::*;
     use once_cell::sync::Lazy;
     use parking_lot::Mutex;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+    use std::thread;
     static CLIPBOARD_SOURCE_CACHE: Lazy<Mutex<Option<ClipboardSourceInfo>>> =
         Lazy::new(|| Mutex::new(None));
 
     static SOURCE_MONITOR_RUNNING: AtomicBool = AtomicBool::new(false);
+    static SOURCE_MONITOR_LIFECYCLE_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+    static SOURCE_MONITOR_THREAD: Lazy<Mutex<Option<thread::JoinHandle<()>>>> =
+        Lazy::new(|| Mutex::new(None));
+    static SOURCE_MONITOR_WINDOW: AtomicIsize = AtomicIsize::new(0);
+
+    const SOURCE_MONITOR_CLASS_NAME: windows::core::PCWSTR = windows::core::w!("KiroClipboardMonitor");
+    const SOURCE_MONITOR_EXIT_MESSAGE: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 1;
+
+    unsafe extern "system" fn source_monitor_wnd_proc(
+        hwnd: windows::Win32::Foundation::HWND,
+        msg: u32,
+        wparam: windows::Win32::Foundation::WPARAM,
+        lparam: windows::Win32::Foundation::LPARAM,
+    ) -> windows::Win32::Foundation::LRESULT {
+        use windows::Win32::Foundation::LRESULT;
+        use windows::Win32::UI::WindowsAndMessaging::{DefWindowProcW, WM_CLIPBOARDUPDATE};
+
+        if msg == WM_CLIPBOARDUPDATE {
+            let source = get_clipboard_source_internal();
+            *CLIPBOARD_SOURCE_CACHE.lock() = Some(source);
+            return LRESULT(0);
+        }
+
+        if msg == SOURCE_MONITOR_EXIT_MESSAGE {
+            return LRESULT(0);
+        }
+
+        unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
+    }
 
     // 启动剪贴板来源监控
     pub fn start_clipboard_source_monitor() {
-        use std::thread;
-        use windows::Win32::Foundation::{HWND, LPARAM, WPARAM, LRESULT};
+        let _lifecycle_guard = SOURCE_MONITOR_LIFECYCLE_LOCK.lock();
+
+        if SOURCE_MONITOR_RUNNING.load(Ordering::SeqCst) {
+            return;
+        }
+
+        stop_clipboard_source_monitor_inner();
+
         use windows::Win32::UI::WindowsAndMessaging::{
-            CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW,
-            GetMessageW, RegisterClassW, TranslateMessage, MSG, WNDCLASSW,
-            WM_CLIPBOARDUPDATE, WINDOW_EX_STYLE, WS_OVERLAPPED,
+            CreateWindowExW, DestroyWindow, DispatchMessageW, GetMessageW,
+            RegisterClassW, TranslateMessage, MSG, WNDCLASSW, WINDOW_EX_STYLE,
+            WS_OVERLAPPED,
         };
         use windows::Win32::System::DataExchange::{
             AddClipboardFormatListener, RemoveClipboardFormatListener,
         };
-        use windows::core::w;
+        use windows::Win32::Foundation::GetLastError;
+        use windows::Win32::Foundation::ERROR_CLASS_ALREADY_EXISTS;
 
-        if SOURCE_MONITOR_RUNNING
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_err()
-        {
-            return;
-        }
+        SOURCE_MONITOR_RUNNING.store(true, Ordering::SeqCst);
 
-        thread::spawn(move || {
+        let handle = thread::spawn(move || {
             unsafe {
-                unsafe extern "system" fn wnd_proc(
-                    hwnd: HWND,
-                    msg: u32,
-                    wparam: WPARAM,
-                    lparam: LPARAM,
-                ) -> LRESULT {
-                    if msg == WM_CLIPBOARDUPDATE {
-                        let source = get_clipboard_source_internal();
-                        *CLIPBOARD_SOURCE_CACHE.lock() = Some(source);
-                        return LRESULT(0);
-                    }
-                    DefWindowProcW(hwnd, msg, wparam, lparam)
-                }
-
-                let class_name = w!("KiroClipboardMonitor");
                 let wc = WNDCLASSW {
-                    lpfnWndProc: Some(wnd_proc),
-                    lpszClassName: class_name,
+                    lpfnWndProc: Some(source_monitor_wnd_proc),
+                    lpszClassName: SOURCE_MONITOR_CLASS_NAME,
                     ..Default::default()
                 };
 
-                if RegisterClassW(&wc) == 0 {
+                if RegisterClassW(&wc) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS {
                     SOURCE_MONITOR_RUNNING.store(false, Ordering::SeqCst);
                     return;
                 }
 
                 let hwnd = CreateWindowExW(
                     WINDOW_EX_STYLE(0),
-                    class_name,
-                    w!("Clipboard Monitor"),
+                    SOURCE_MONITOR_CLASS_NAME,
+                    windows::core::w!("Clipboard Monitor"),
                     WS_OVERLAPPED,
                     0, 0, 0, 0,
                     None, None, None, None,
@@ -119,7 +136,11 @@ mod windows_impl {
                     return;
                 };
 
+                SOURCE_MONITOR_WINDOW.store(hwnd.0 as isize, Ordering::SeqCst);
+
                 if AddClipboardFormatListener(hwnd).is_err() {
+                    SOURCE_MONITOR_WINDOW.store(0, Ordering::SeqCst);
+                    let _ = DestroyWindow(hwnd);
                     SOURCE_MONITOR_RUNNING.store(false, Ordering::SeqCst);
                     return;
                 }
@@ -136,13 +157,45 @@ mod windows_impl {
 
                 let _ = RemoveClipboardFormatListener(hwnd);
                 let _ = DestroyWindow(hwnd);
+                SOURCE_MONITOR_WINDOW.store(0, Ordering::SeqCst);
+                SOURCE_MONITOR_RUNNING.store(false, Ordering::SeqCst);
             }
         });
+
+        *SOURCE_MONITOR_THREAD.lock() = Some(handle);
     }
 
     // 停止剪贴板来源监控
     pub fn stop_clipboard_source_monitor() {
+        let _lifecycle_guard = SOURCE_MONITOR_LIFECYCLE_LOCK.lock();
+        stop_clipboard_source_monitor_inner();
+    }
+
+    fn stop_clipboard_source_monitor_inner() {
+        use windows::Win32::Foundation::{HWND, LPARAM, WPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::PostMessageW;
+
         SOURCE_MONITOR_RUNNING.store(false, Ordering::SeqCst);
+
+        let hwnd_value = SOURCE_MONITOR_WINDOW.load(Ordering::SeqCst);
+        if hwnd_value != 0 {
+            let _ = unsafe {
+                PostMessageW(
+                    Some(HWND(hwnd_value as *mut core::ffi::c_void)),
+                    SOURCE_MONITOR_EXIT_MESSAGE,
+                    WPARAM(0),
+                    LPARAM(0),
+                )
+            };
+        }
+
+        if let Some(handle) = SOURCE_MONITOR_THREAD.lock().take() {
+            if let Err(error) = handle.join() {
+                eprintln!("剪贴板来源监控线程退出失败: {:?}", error);
+            }
+        }
+
+        SOURCE_MONITOR_WINDOW.store(0, Ordering::SeqCst);
     }
 
     // 获取剪贴板来源

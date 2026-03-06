@@ -1,8 +1,8 @@
 use serde_json::json;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Mutex;
-use std::collections::HashMap;
+use parking_lot::Mutex;
 use once_cell::sync::OnceCell;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager, WebviewWindow, WebviewWindowBuilder, Size, LogicalSize, PhysicalPosition, PhysicalSize};
 
@@ -25,17 +25,19 @@ struct PinImageData {
 
 pub fn init_pin_image_window() {
     PIN_IMAGE_COUNTER.store(0, Ordering::SeqCst);
-    PIN_IMAGE_DATA_MAP.get_or_init(|| Mutex::new(HashMap::new()));
+    pin_image_data_map();
+}
+
+fn pin_image_data_map() -> &'static Mutex<HashMap<String, PinImageData>> {
+    PIN_IMAGE_DATA_MAP.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 // 更新贴图图片文件路径
 #[allow(dead_code)]
 pub fn update_pin_image_file(label: &str, new_file_path: String) {
-    if let Some(data_map) = PIN_IMAGE_DATA_MAP.get() {
-        let mut map = data_map.lock().unwrap();
-        if let Some(data) = map.get_mut(label) {
-            data.file_path = new_file_path;
-        }
+    let mut map = pin_image_data_map().lock();
+    if let Some(data) = map.get_mut(label) {
+        data.file_path = new_file_path;
     }
 }
 
@@ -47,13 +49,11 @@ pub fn update_pin_image_data(
     original_image_path: Option<String>,
     edit_data: Option<String>,
 ) {
-    if let Some(data_map) = PIN_IMAGE_DATA_MAP.get() {
-        let mut map = data_map.lock().unwrap();
-        if let Some(data) = map.get_mut(label) {
-            data.file_path = new_file_path;
-            data.original_image_path = original_image_path;
-            data.edit_data = edit_data;
-        }
+    let mut map = pin_image_data_map().lock();
+    if let Some(data) = map.get_mut(label) {
+        data.file_path = new_file_path;
+        data.original_image_path = original_image_path;
+        data.edit_data = edit_data;
     }
 }
 
@@ -136,29 +136,25 @@ pub async fn pin_image_from_file(
     if is_preview {
         if let Some(existing) = app.get_webview_window(&window_label) {
             let _ = existing.close();
-            if let Some(data_map) = PIN_IMAGE_DATA_MAP.get() {
-                data_map.lock().unwrap().remove(&window_label);
-            }
+            pin_image_data_map().lock().remove(&window_label);
         }
     }
     
     // 存储图片数据
     let actual_original_path = original_image_path.or_else(|| Some(file_path.clone()));
-    if let Some(data_map) = PIN_IMAGE_DATA_MAP.get() {
-        data_map.lock().unwrap().insert(
-            window_label.clone(),
-            PinImageData {
-                file_path,
-                width: img_width,
-                height: img_height,
-                preview_mode: is_preview,
-                image_physical_x,
-                image_physical_y,
-                original_image_path: actual_original_path,
-                edit_data,
-            },
-        );
-    }
+    pin_image_data_map().lock().insert(
+        window_label.clone(),
+        PinImageData {
+            file_path,
+            width: img_width,
+            height: img_height,
+            preview_mode: is_preview,
+            image_physical_x,
+            image_physical_y,
+            original_image_path: actual_original_path,
+            edit_data,
+        },
+    );
     
     let window = create_pin_image_window(&app, &window_label, img_width, img_height, pos_x, pos_y).await?;
     
@@ -258,20 +254,18 @@ async fn create_pin_image_window(
 // 前端请求获取图片数据
 #[tauri::command]
 pub fn get_pin_image_data(window: WebviewWindow) -> Result<serde_json::Value, String> {
-    if let Some(data_map) = PIN_IMAGE_DATA_MAP.get() {
-        let map = data_map.lock().unwrap();
-        if let Some(data) = map.get(window.label()) {
-            return Ok(json!({
-                "file_path": data.file_path,
-                "width": data.width,
-                "height": data.height,
-                "preview_mode": data.preview_mode,
-                "image_physical_x": data.image_physical_x,
-                "image_physical_y": data.image_physical_y,
-                "original_image_path": data.original_image_path,
-                "edit_data": data.edit_data
-            }));
-        }
+    let map = pin_image_data_map().lock();
+    if let Some(data) = map.get(window.label()) {
+        return Ok(json!({
+            "file_path": data.file_path,
+            "width": data.width,
+            "height": data.height,
+            "preview_mode": data.preview_mode,
+            "image_physical_x": data.image_physical_x,
+            "image_physical_y": data.image_physical_y,
+            "original_image_path": data.original_image_path,
+            "edit_data": data.edit_data
+        }));
     }
     Err("未找到图片数据".to_string())
 }
@@ -283,15 +277,13 @@ pub async fn save_pin_image_as(app: AppHandle, window: WebviewWindow) -> Result<
     use std::path::Path;
     use tauri_plugin_dialog::DialogExt;
     
-    let file_path = if let Some(data_map) = PIN_IMAGE_DATA_MAP.get() {
-        let map = data_map.lock().unwrap();
+    let file_path = {
+        let map = pin_image_data_map().lock();
         if let Some(data) = map.get(window.label()) {
             data.file_path.clone()
         } else {
             return Err("未找到图片数据".to_string());
         }
-    } else {
-        return Err("未找到图片数据".to_string());
     };
     
     let path = Path::new(&file_path);
@@ -325,9 +317,7 @@ pub async fn save_pin_image_as(app: AppHandle, window: WebviewWindow) -> Result<
 pub fn close_image_preview(app: AppHandle) -> Result<(), String> {
     let label = "image-preview";
     if let Some(window) = app.get_webview_window(label) {
-        if let Some(data_map) = PIN_IMAGE_DATA_MAP.get() {
-            data_map.lock().unwrap().remove(label);
-        }
+        pin_image_data_map().lock().remove(label);
         let _ = window.hide();
         let _ = window.set_size(Size::Logical(LogicalSize::new(1.0, 1.0)));
         let _ = window.close();
@@ -339,19 +329,22 @@ pub fn close_image_preview(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn close_pin_image_window_by_self(window: WebviewWindow) -> Result<(), String> {
     let label = window.label().to_string();
-    
-    if let Some(data_map) = PIN_IMAGE_DATA_MAP.get() {
-        let mut map = data_map.lock().unwrap();
-        if let Some(data) = map.remove(&label) {
-            if let Some(ref original_path) = data.original_image_path {
-                if data.file_path != *original_path {
-                    let file_in_use = map.values().any(|d| d.file_path == data.file_path);
-                    if !file_in_use {
-                        let _ = std::fs::remove_file(&data.file_path);
-                    }
-                }
-            }
-        }
+
+    let (removed_data, should_remove_file) = {
+        let mut map = pin_image_data_map().lock();
+        let removed_data = map.remove(&label);
+        let should_remove_file = removed_data.as_ref().is_some_and(|data| {
+            data.original_image_path
+                .as_ref()
+                .is_some_and(|original_path| data.file_path != *original_path)
+                && !map.values().any(|item| item.file_path == data.file_path)
+        });
+
+        (removed_data, should_remove_file)
+    };
+
+    if let (Some(data), true) = (removed_data, should_remove_file) {
+        let _ = std::fs::remove_file(&data.file_path);
     }
     
     let _ = window.set_size(Size::Logical(LogicalSize::new(1.0, 1.0)));

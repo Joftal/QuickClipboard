@@ -1,15 +1,27 @@
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use rdev::{grab, Event, EventType, Key};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
 use std::collections::HashMap;
 use tauri::{Emitter, Manager, WebviewWindow};
 
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::{LPARAM, WPARAM};
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Threading::GetCurrentThreadId;
+#[cfg(target_os = "windows")]
+use windows::Win32::UI::WindowsAndMessaging::{
+    PeekMessageW, PostThreadMessageW, MSG, PM_NOREMOVE, WM_QUIT,
+};
+
 static MAIN_WINDOW: Mutex<Option<WebviewWindow>> = Mutex::new(None);
 static MONITORING_ACTIVE: AtomicBool = AtomicBool::new(false);
 static MONITORING_THREAD: Mutex<Option<thread::JoinHandle<()>>> = Mutex::new(None);
+static MONITORING_THREAD_ID: AtomicU32 = AtomicU32::new(0);
+static MONITORING_LIFECYCLE_LOCK: Mutex<()> = Mutex::new(());
 
 static NAVIGATION_KEYS_ENABLED: AtomicBool = AtomicBool::new(false);
 static MOUSE_MONITORING_ENABLED: AtomicBool = AtomicBool::new(false);
@@ -56,13 +68,33 @@ pub fn update_main_window(window: WebviewWindow) {
 }
 
 pub fn start_monitoring() {
+    let _lifecycle_guard = MONITORING_LIFECYCLE_LOCK.lock();
+
     if MONITORING_ACTIVE.load(Ordering::SeqCst) {
         return;
     }
 
+    stop_monitoring_thread();
+
     MONITORING_ACTIVE.store(true, Ordering::SeqCst);
 
-    let handle = thread::spawn(|| {
+    let (ready_tx, ready_rx) = mpsc::sync_channel(1);
+
+    let handle = thread::spawn(move || {
+        #[cfg(target_os = "windows")]
+        {
+            let thread_id = unsafe { GetCurrentThreadId() };
+            let mut message = MSG::default();
+
+            unsafe {
+                let _ = PeekMessageW(&mut message, None, 0, 0, PM_NOREMOVE);
+            }
+
+            MONITORING_THREAD_ID.store(thread_id, Ordering::SeqCst);
+        }
+
+        let _ = ready_tx.send(());
+
         if let Err(error) = grab(move |event| {
             if !MONITORING_ACTIVE.load(Ordering::SeqCst) {
                 return Some(event);
@@ -72,18 +104,52 @@ pub fn start_monitoring() {
         }) {
             eprintln!("输入监控错误: {:?}", error);
         }
+
+        MONITORING_THREAD_ID.store(0, Ordering::SeqCst);
+        MONITORING_ACTIVE.store(false, Ordering::SeqCst);
     });
 
     *MONITORING_THREAD.lock() = Some(handle);
+    let _ = ready_rx.recv();
 }
 
 pub fn stop_monitoring() {
-    MONITORING_ACTIVE.store(false, Ordering::SeqCst);
+    let _lifecycle_guard = MONITORING_LIFECYCLE_LOCK.lock();
+    stop_monitoring_thread();
 }
 
 pub fn is_monitoring_active() -> bool {
     MONITORING_ACTIVE.load(Ordering::SeqCst)
 }
+
+fn stop_monitoring_thread() {
+    MONITORING_ACTIVE.store(false, Ordering::SeqCst);
+    signal_monitor_thread_exit();
+
+    let handle = MONITORING_THREAD.lock().take();
+    if let Some(handle) = handle {
+        if let Err(error) = handle.join() {
+            eprintln!("输入监控线程退出失败: {:?}", error);
+        }
+    }
+
+    MONITORING_THREAD_ID.store(0, Ordering::SeqCst);
+}
+
+#[cfg(target_os = "windows")]
+fn signal_monitor_thread_exit() {
+    let thread_id = MONITORING_THREAD_ID.load(Ordering::SeqCst);
+    if thread_id == 0 {
+        return;
+    }
+
+    if let Err(error) = unsafe { PostThreadMessageW(thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) } {
+        eprintln!("发送输入监控退出信号失败: {:?}", error);
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn signal_monitor_thread_exit() {}
 
 pub fn enable_navigation_keys() {
     NAVIGATION_KEYS_ENABLED.store(true, Ordering::SeqCst);

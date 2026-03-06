@@ -131,7 +131,7 @@ fn build_pin_images_children() -> Vec<CtxMenuItem> {
         if total_count > MAX_PIN_IMAGES_DISPLAY {
             children.push(separator_item());
             children.push(CtxMenuItem {
-                id: "pin-open-folder".to_string(),
+                id: "pin-more".to_string(),
                 label: format!("更多... (共{}张)", total_count),
                 icon: Some("ti ti-dots".to_string()),
                 favicon: None,
@@ -258,7 +258,7 @@ fn handle_tray_menu_selection(app: &AppHandle, selected_id: &str) {
         "quit" => {
             app.exit(0);
         }
-        "pin-open-folder" => {
+        "pin-more" | "pin-open-folder" => {
             open_pin_images_folder();
         }
         id if id.starts_with("pin-image-") => {

@@ -1,4 +1,5 @@
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
@@ -20,7 +21,7 @@ pub fn create_click_handler(app_handle: AppHandle) -> impl Fn() + Send + 'static
     
     move || {
         let now = Instant::now();
-        let mut last_time = last_click_time.lock().unwrap();
+        let mut last_time = last_click_time.lock();
         
         if now.duration_since(*last_time) < Duration::from_millis(50) {
             return;

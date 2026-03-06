@@ -502,6 +502,7 @@
       "resetAllButton": "Reset App",
       "resetAllConfirm": "Reset all data? This will delete all content and restore default settings. This cannot be undone!",
       "overlayMigrating": "Migrating data, please wait...",
+      "overlayExporting": "Exporting data, please wait...",
       "overlayImporting": "Importing data, please wait...",
       "overlayCleaning": "Clearing history, please wait...",
       "overlayResetSettings": "Restoring default settings, please wait...",
