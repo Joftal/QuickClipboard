@@ -1,4 +1,4 @@
-// 菜单构建
+﻿// 菜单构建
 
 use crate::services::database::{get_clipboard_count, query_clipboard_items, QueryParams};
 use super::state::{self, PAGE_SIZE};
@@ -92,7 +92,7 @@ fn create_page_info_item(app: &AppHandle) -> Result<MenuItem<tauri::Wry>, String
     let current_page = state::get_current_page();
 
     let label = if total_pages > 1 {
-        format!("第 {}/{} 页 (↕滚轮翻页)", current_page + 1, total_pages)
+        format!("第 {}/{} 页（滚轮翻页）", current_page + 1, total_pages)
     } else {
         "剪贴板历史".to_string()
     };
@@ -120,8 +120,6 @@ fn create_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, String> {
     menu.append(&page_info).map_err(|e| e.to_string())?;
 
     let settings = crate::get_settings();
-    let is_force_update = crate::windows::updater_window::is_force_update_mode();
-
     let sep1 = PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?;
     menu.append(&sep1).map_err(|e| e.to_string())?;
 
@@ -129,7 +127,7 @@ fn create_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, String> {
         app,
         "toggle",
         "显示主窗口",
-        !is_force_update,
+        true,
         parse_accelerator(&settings.toggle_shortcut).as_deref(),
     )
     .map_err(|e| e.to_string())?;
@@ -185,7 +183,7 @@ fn create_menu(app: &AppHandle) -> Result<Menu<tauri::Wry>, String> {
         app,
         "exit-low-memory",
         "退出低占用模式",
-        !is_force_update,
+        true,
         None::<&str>,
     )
     .map_err(|e| e.to_string())?;
@@ -218,3 +216,7 @@ pub fn update_native_menu(app: &AppHandle) -> Result<(), String> {
     }
     Ok(())
 }
+
+
+
+

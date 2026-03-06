@@ -8,7 +8,6 @@ const WEBVIEW_LABELS: &[&str] = &[
     "context-menu",
     "settings",
     "text-editor",
-    "updater",
 ];
 
 // 进入低占用模式

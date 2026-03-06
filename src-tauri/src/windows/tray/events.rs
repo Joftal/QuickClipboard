@@ -4,13 +4,6 @@ use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
 
 pub fn handle_tray_click(app: &AppHandle) {
-    if crate::windows::updater_window::is_force_update_mode() {
-        if let Some(w) = app.get_webview_window("updater") {
-            let _ = w.show();
-            let _ = w.set_focus();
-        }
-        return;
-    }
     if let Some(window) = app.get_webview_window("main") {
         crate::show_main_window(&window);
     }

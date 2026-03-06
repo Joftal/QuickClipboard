@@ -614,30 +614,5 @@
       "detailed": "Detailed",
       "iconOnly": "Icon Only"
     }
-  },
-  "updater": {
-    "title": "Update",
-    "checking": "Checking for updates...",
-    "noUpdate": "You are up to date",
-    "noUpdateShort": "No updates found",
-    "newVersionFound": "New version found {{version}}",
-    "updateWindowOpened": "New version found, updater window opened",
-    "checkFailed": "Failed to check updates: {{msg}}",
-    "downloading": "Downloading update...",
-    "installedRestarting": "Update installed, restarting...",
-    "downloadFailed": "Failed to download or install the update. Please try again later.",
-    "latestVersion": "Latest version: {{version}}",
-    "notes": "Release Notes",
-    "loadingNotes": "Loading release notes...",
-    "noNotes": "No release notes",
-    "downloadAndInstall": "Download and Install",
-    "later": "Later",
-    "backgroundUpdate": "Run in Background",
-    "retry": "Retry",
-    "exitApp": "Exit App",
-    "updateFailed": "Update Failed",
-    "newVersionAvailable": "New version available",
-    "portableNotice": "Portable Version Notice",
-    "portableNoAutoUpdate": "Portable/standalone version does not support auto-update."
   }
 }

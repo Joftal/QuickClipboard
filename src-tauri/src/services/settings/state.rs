@@ -21,13 +21,13 @@ pub fn update_settings(settings: AppSettings) -> Result<(), String> {
     Ok(())
 }
 
-pub fn update_with<F>(updater: F) -> Result<(), String>
+pub fn update_with<F>(mutator: F) -> Result<(), String>
 where
     F: FnOnce(&mut AppSettings),
 {
     let mut current_settings = SETTINGS.write();
     let mut next_settings = current_settings.clone();
-    updater(&mut next_settings);
+    mutator(&mut next_settings);
     SettingsStorage::save(&next_settings)?;
     *current_settings = next_settings;
     Ok(())

@@ -28,9 +28,6 @@
     "core:window:allow-set-focus",
     "core:window:allow-start-dragging",
     "dialog:allow-save",
-    "dialog:default",
-    "updater:default",
-    "updater:allow-check",
-    "updater:allow-download-and-install"
+    "dialog:default"
   ]
 }

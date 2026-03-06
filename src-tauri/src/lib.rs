@@ -93,7 +93,6 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_drag::init())
         .plugin(tauri_plugin_store::Builder::new().build());
@@ -186,7 +185,6 @@ pub fn run() {
                 commands::exit_low_memory_mode,
                 commands::is_low_memory_mode,
                 commands::reload_all_windows,
-                commands::check_updates_and_open_window,
                 windows::plugins::context_menu::commands::show_context_menu,
                 windows::plugins::context_menu::commands::get_context_menu_options,
                 windows::plugins::context_menu::commands::submit_context_menu,
@@ -289,8 +287,6 @@ pub fn run() {
                 }
                 
                 let _ = windows::main_window::restore_edge_snap_on_startup(&window);
-
-                windows::updater_window::start_update_checker(app.handle().clone());
 
                 services::memory::init();
 

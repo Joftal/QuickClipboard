@@ -43,8 +43,7 @@
         "text-editor",
         "pin-image",
         "input-dialog",
-        "context-menu",
-        "updater"
+        "context-menu"
       ],
       "assetProtocol": {
         "enable": true,
@@ -85,15 +84,6 @@
       "wix": {
         "language": "zh-CN"
       }
-    },
-    "createUpdaterArtifacts": true
-  },
-  "plugins": {
-    "updater": {
-      "endpoints": [
-        "https://api.quickclipboard.cn/update/latest.json"
-      ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlCMDU4RTQxRTUyRTg3Q0MKUldUTWh5N2xRWTRGbTVxWUFhdXJPUzVKTkZkcjF6OE55dzg3UUJlRGF4em8yczliUUpTR29CKzQK"
     }
   }
 }

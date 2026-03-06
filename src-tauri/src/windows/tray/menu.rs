@@ -1,4 +1,4 @@
-use std::fs;
+﻿use std::fs;
 use std::path::PathBuf;
 use tauri::AppHandle;
 use crate::windows::plugins::context_menu::window::{MenuItem as CtxMenuItem, ContextMenuOptions, show_menu};
@@ -132,7 +132,7 @@ fn build_pin_images_children() -> Vec<CtxMenuItem> {
             children.push(separator_item());
             children.push(CtxMenuItem {
                 id: "pin-more".to_string(),
-                label: format!("更多... (共{}张)", total_count),
+                label: format!("更多...（共 {} 张）", total_count),
                 icon: Some("ti ti-dots".to_string()),
                 favicon: None,
                 icon_color: None,
@@ -155,22 +155,20 @@ fn build_pin_images_children() -> Vec<CtxMenuItem> {
 // 托盘菜单
 pub async fn show_tray_menu(app: AppHandle) -> Result<(), String> {
     let settings = crate::get_settings();
-    let is_force_update = crate::windows::updater_window::is_force_update_mode();
-    
     let hotkeys_label = if settings.hotkeys_enabled { "禁用快捷键" } else { "启用快捷键" };
     let monitor_label = if settings.clipboard_monitor { "禁用剪贴板监听" } else { "启用剪贴板监听" };
     
     let items = vec![
-        menu_item_with_state("toggle", "显示/隐藏", Some("ti ti-app-window"), is_force_update),
+        menu_item_with_state("toggle", "显示/隐藏", Some("ti ti-app-window"), false),
         separator_item(),
-        menu_item_with_state("settings", "设置", Some("ti ti-settings"), is_force_update),
+        menu_item_with_state("settings", "设置", Some("ti ti-settings"), false),
         CtxMenuItem {
             id: "pin-images".to_string(),
             label: "贴图".to_string(),
             icon: Some("ti ti-pinned".to_string()),
             favicon: None,
             icon_color: None,
-            disabled: is_force_update,
+            disabled: false,
             separator: false,
             item_type: None,
             buttons: None,
@@ -178,10 +176,10 @@ pub async fn show_tray_menu(app: AppHandle) -> Result<(), String> {
             preview_image: None,
         },
         separator_item(),
-        menu_item_with_state("toggle-hotkeys", hotkeys_label, Some("ti ti-keyboard"), is_force_update),
-        menu_item_with_state("toggle-clipboard-monitor", monitor_label, Some("ti ti-clipboard"), is_force_update),
+        menu_item_with_state("toggle-hotkeys", hotkeys_label, Some("ti ti-keyboard"), false),
+        menu_item_with_state("toggle-clipboard-monitor", monitor_label, Some("ti ti-clipboard"), false),
         separator_item(),
-        menu_item_with_state("low-memory-mode", "进入低占用模式", Some("ti ti-leaf"), is_force_update),
+        menu_item_with_state("low-memory-mode", "进入低占用模式", Some("ti ti-leaf"), false),
         separator_item(),
         menu_item("restart", "重启程序", Some("ti ti-refresh")),
         menu_item("quit", "退出", Some("ti ti-power")),
@@ -313,3 +311,4 @@ fn open_pin_images_folder() {
         let _ = tauri_plugin_opener::open_path(&pin_images_dir, None::<&str>);
     }
 }
+
