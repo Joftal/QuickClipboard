@@ -17,6 +17,14 @@ import { getPrimaryType } from '@shared/utils/contentType';
 const ITEM_HEIGHT = 52;
 const ITEM_PADDING = 8;
 
+function clampIndex(totalCount, nextIndex) {
+  if (totalCount <= 0) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(nextIndex, totalCount - 1));
+}
+
 function QuickPasteWindow() {
   const { t } = useTranslation();
   const containerRef = useRef(null);
@@ -55,6 +63,10 @@ function QuickPasteWindow() {
 
   // 计算可见的项目范围
   const visibleItems = useMemo(() => {
+    if (totalCount <= 0) {
+      return [];
+    }
+
     const items = [];
     for (let i = 0; i < visibleCount && i + scrollOffset < totalCount; i++) {
       items.push({
@@ -116,8 +128,8 @@ function QuickPasteWindow() {
     };
   }, []);
   const handleItemClick = useCallback((index) => {
-    setActiveIndex(index);
-  }, []);
+    setActiveIndex(clampIndex(totalCount, index));
+  }, [totalCount]);
   useEffect(() => {
     applyThemeToBody(theme, 'quickpaste');
   }, [theme, effectiveTheme]);
@@ -178,6 +190,11 @@ function QuickPasteWindow() {
   useEffect(() => {
     const handleWheel = (e) => {
       e.preventDefault();
+
+      if (totalCount <= 0) {
+        return;
+      }
+
       setActiveIndex(prev => {
         const max = totalCount - 1;
         return e.deltaY > 0
@@ -192,6 +209,11 @@ function QuickPasteWindow() {
 
   useEffect(() => {
     const unlisten = listen('quickpaste-next', () => {
+      if (totalCount <= 0) {
+        setActiveIndex(0);
+        return;
+      }
+
       setActiveIndex(prev => {
         const max = totalCount - 1;
         return prev < max ? prev + 1 : 0;

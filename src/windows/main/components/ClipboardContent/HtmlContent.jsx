@@ -20,10 +20,17 @@ function HtmlContent({
 
   useEffect(() => {
     if (!contentRef.current || processedRef.current === htmlContent) return;
+
     processedRef.current = htmlContent;
+    const container = contentRef.current;
+    let cancelled = false;
+
     const cleanHTML = sanitizeHTML(htmlContent);
-    contentRef.current.innerHTML = cleanHTML;
-    const images = contentRef.current.querySelectorAll('img');
+    container.innerHTML = cleanHTML;
+
+    const pendingImages = [];
+    const images = container.querySelectorAll('img');
+
     images.forEach(img => {
       const imageId = img.getAttribute('data-image-id');
       const src = img.getAttribute('src');
@@ -33,33 +40,91 @@ function HtmlContent({
         const originalSrc = img.src;
         img.src = PLACEHOLDER_SRC;
         img.classList.add('html-image-pending');
-        invoke('get_data_directory').then(dataDir => {
-          const filePath = `${dataDir}/clipboard_images/${imageId}.png`;
-          const assetUrl = convertFileSrc(filePath, 'asset');
-          img.src = assetUrl;
-          img.classList.remove('html-image-pending');
-        }).catch(error => {
-          console.error('加载本地图片失败，恢复原始src:', error, 'imageId:', imageId);
-          img.src = originalSrc;
-          img.classList.remove('html-image-pending');
+        pendingImages.push({
+          img,
+          imageId,
+          fallbackSrc: originalSrc,
+          fallbackAlt: img.alt,
+          useErrorPlaceholder: false
         });
       } else if (src && src.startsWith('image-id:')) {
         const legacyImageId = src.substring(9);
         img.src = PLACEHOLDER_SRC;
         img.classList.add('html-image-pending');
-        invoke('get_data_directory').then(dataDir => {
-          const filePath = `${dataDir}/clipboard_images/${legacyImageId}.png`;
-          const assetUrl = convertFileSrc(filePath, 'asset');
-          img.src = assetUrl;
-          img.classList.remove('html-image-pending');
-        }).catch(error => {
-          console.error('加载 HTML 图片失败:', error, 'imageId:', legacyImageId);
-          img.src = ERROR_SRC;
-          img.alt = '图片加载失败';
-          img.classList.remove('html-image-pending');
+        pendingImages.push({
+          img,
+          imageId: legacyImageId,
+          fallbackSrc: ERROR_SRC,
+          fallbackAlt: '图片加载失败',
+          useErrorPlaceholder: true
         });
       }
     });
+
+    if (!pendingImages.length) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    invoke('get_data_directory').then(dataDir => {
+      if (cancelled || contentRef.current !== container) {
+        return;
+      }
+
+      pendingImages.forEach(({ img, imageId, fallbackSrc, fallbackAlt, useErrorPlaceholder }) => {
+        if (!img.isConnected) {
+          return;
+        }
+
+        const filePath = `${dataDir}/clipboard_images/${imageId}.png`;
+        img.src = convertFileSrc(filePath, 'asset');
+        img.classList.remove('html-image-pending');
+
+        img.onerror = () => {
+          if (cancelled || !img.isConnected) {
+            return;
+          }
+
+          img.src = fallbackSrc;
+          if (useErrorPlaceholder) {
+            img.alt = fallbackAlt;
+          }
+          img.classList.remove('html-image-pending');
+          img.onerror = null;
+        };
+      });
+    }).catch(error => {
+      if (cancelled || contentRef.current !== container) {
+        return;
+      }
+
+      pendingImages.forEach(({ img, imageId, fallbackSrc, fallbackAlt, useErrorPlaceholder }) => {
+        if (!img.isConnected) {
+          return;
+        }
+
+        if (useErrorPlaceholder) {
+          console.error('加载 HTML 图片失败:', error, 'imageId:', imageId);
+          img.src = fallbackSrc;
+          img.alt = fallbackAlt;
+        } else {
+          console.error('加载本地图片失败，恢复原始src:', error, 'imageId:', imageId);
+          img.src = fallbackSrc;
+        }
+        img.classList.remove('html-image-pending');
+        img.onerror = null;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      pendingImages.forEach(({ img }) => {
+        if (img) {
+          img.onerror = null;
+        }
+      });
+    };
   }, [htmlContent]);
 
   // 处理搜索高亮

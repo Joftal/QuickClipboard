@@ -27,10 +27,7 @@ pub fn paste_text_direct(text: &str) -> Result<(), String> {
         .map_err(|e| format!("创建剪贴板上下文失败: {}", e))?;
     
     paste_text(&ctx, text)?;
-    
-    std::thread::sleep(std::time::Duration::from_millis(50));
     simulate_paste()?;
-    std::thread::sleep(std::time::Duration::from_millis(100));
     Ok(())
 }
 
@@ -49,10 +46,7 @@ pub fn paste_image_file(file_path: &str) -> Result<(), String> {
         .map_err(|e| format!("创建剪贴板上下文失败: {}", e))?;
     
     set_clipboard_files(&ctx, vec![file_path.to_string()])?;
-    
-    std::thread::sleep(std::time::Duration::from_millis(50));
     simulate_paste()?;
-    std::thread::sleep(std::time::Duration::from_millis(100));
     
     Ok(())
 }
@@ -152,10 +146,8 @@ fn paste_item_internal(
         "image" | "file" => paste_files(&ctx, &content)?,
         _ => return Err(format!("不支持的内容类型: {}", item.content_type)),
     }
-    
-    std::thread::sleep(std::time::Duration::from_millis(50));
+
     simulate_paste()?;
-    std::thread::sleep(std::time::Duration::from_millis(100));
     
     Ok(())
 }

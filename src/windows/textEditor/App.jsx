@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSnapshot } from 'valtio';
 import { settingsStore, initSettings } from '@shared/store/settingsStore';
+import { toast } from '@shared/store/toastStore';
 import { useTheme, applyThemeToBody } from '@shared/hooks/useTheme';
 import { useSettingsSync } from '@shared/hooks/useSettingsSync';
 import { getClipboardItemById, getFavoriteItemById, updateClipboardItem, updateFavorite, addFavorite } from '@shared/api';
@@ -108,7 +109,10 @@ function App() {
           setOriginalContent(item.content || '');
           setSelectedGroup(item.group_name || '全部');
         }
-      } catch (error) {}
+      } catch (error) {
+        console.error('加载文本编辑器数据失败:', error);
+        toast.error(error?.message || t('common.loadError'));
+      }
     };
     loadData();
   }, [t]);

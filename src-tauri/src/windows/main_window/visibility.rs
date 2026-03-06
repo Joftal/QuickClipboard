@@ -1,8 +1,85 @@
 use super::state::{set_window_state, WindowState};
-use tauri::{AppHandle, WebviewWindow};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
+use tauri::{AppHandle, Manager, WebviewWindow};
+
+static VISIBILITY_REQUEST_ID: AtomicU64 = AtomicU64::new(0);
+
+fn next_visibility_request_id() -> u64 {
+    VISIBILITY_REQUEST_ID.fetch_add(1, Ordering::SeqCst) + 1
+}
+
+fn is_visibility_request_current(request_id: u64) -> bool {
+    VISIBILITY_REQUEST_ID.load(Ordering::SeqCst) == request_id
+}
+
+fn schedule_restore_always_on_top(window: &WebviewWindow, request_id: u64) {
+    let app = window.app_handle().clone();
+    let label = window.label().to_string();
+
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        if !is_visibility_request_current(request_id) {
+            return;
+        }
+
+        if let Some(window) = app.get_webview_window(&label) {
+            let _ = window.set_always_on_top(true);
+        }
+    });
+}
+
+fn finalize_hide_normal_window(window: WebviewWindow, request_id: u64) {
+    if !is_visibility_request_current(request_id) {
+        return;
+    }
+
+    if let Some(position) = window.outer_position().ok().filter(|_| crate::get_settings().window_position_mode == "remember") {
+        let mut settings = crate::get_settings();
+        settings.saved_window_position = Some((position.x, position.y));
+
+        if settings.remember_window_size {
+            if let Ok(size) = window.outer_size() {
+                settings.saved_window_size = Some((size.width, size.height));
+            }
+        }
+
+        let _ = crate::services::update_settings(settings);
+    }
+
+    if !super::state::is_pinned() {
+        let _ = window.set_always_on_top(false);
+    }
+
+    let _ = window.hide();
+    set_window_state(WindowState::Hidden);
+
+    crate::input_monitor::disable_mouse_monitoring();
+    crate::input_monitor::disable_navigation_keys();
+}
+
+fn schedule_finalize_hide(window: &WebviewWindow, delay_ms: u64, request_id: u64) {
+    let app = window.app_handle().clone();
+    let label = window.label().to_string();
+
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+
+        if !is_visibility_request_current(request_id) {
+            return;
+        }
+
+        if let Some(window) = app.get_webview_window(&label) {
+            finalize_hide_normal_window(window, request_id);
+        }
+    });
+}
 
 // 显示主窗口
 pub fn show_main_window(window: &WebviewWindow) {
+    let request_id = next_visibility_request_id();
+
     if crate::services::system::is_front_app_globally_disabled_from_settings() {
         return;
     }
@@ -20,8 +97,7 @@ pub fn show_main_window(window: &WebviewWindow) {
 
     show_normal_window(window);
     let _ = window.set_always_on_top(false);
-    std::thread::sleep(std::time::Duration::from_millis(10));
-    let _ = window.set_always_on_top(true);
+    schedule_restore_always_on_top(window, request_id);
 }
 
 // 隐藏主窗口
@@ -116,39 +192,22 @@ fn show_normal_window(window: &WebviewWindow) {
 
 fn hide_normal_window(window: &WebviewWindow) {
     use tauri::Emitter;
-    use tauri::Manager;
+
+    let request_id = next_visibility_request_id();
 
     let _ = crate::windows::pin_image_window::close_image_preview(window.app_handle().clone());
     
     let _ = window.emit("window-hide-animation", ());
 
-    let settings = crate::get_settings();
-    if settings.clipboard_animation_enabled {
-        std::thread::sleep(std::time::Duration::from_millis(200));
-    }
-
-    if settings.window_position_mode == "remember" {
-        if let Ok(position) = window.outer_position() {
-            let mut settings = crate::get_settings();
-            settings.saved_window_position = Some((position.x, position.y));
-
-            if settings.remember_window_size {
-                if let Ok(size) = window.outer_size() {
-                    settings.saved_window_size = Some((size.width, size.height));
-                }
-            }
-
-            let _ = crate::services::update_settings(settings);
-        }
-    }
-
-    if !super::state::is_pinned() {
-        let _ = window.set_always_on_top(false);
-    }
-
-    let _ = window.hide();
     set_window_state(WindowState::Hidden);
-
     crate::input_monitor::disable_mouse_monitoring();
     crate::input_monitor::disable_navigation_keys();
+
+    let settings = crate::get_settings();
+    if settings.clipboard_animation_enabled {
+        schedule_finalize_hide(window, 200, request_id);
+        return;
+    }
+
+    finalize_hide_normal_window(window.clone(), request_id);
 }

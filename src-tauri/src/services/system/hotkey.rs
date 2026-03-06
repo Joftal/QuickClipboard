@@ -565,9 +565,7 @@ fn handle_number_shortcut_press(index: usize) -> Result<(), String> {
 fn simulate_paste_only() -> Result<(), String> {
     use crate::services::paste::keyboard::simulate_paste;
 
-    std::thread::sleep(std::time::Duration::from_millis(50));
     simulate_paste()?;
-    std::thread::sleep(std::time::Duration::from_millis(50));
 
     Ok(())
 }

@@ -121,7 +121,8 @@ async function handleContentTypeActions(result, item, index) {
       const { invoke } = await import('@tauri-apps/api/core')
       filePath = await invoke('resolve_image_path', { storedPath })
     }
-  } catch (_) {
+  } catch (error) {
+    console.warn('解析图片文件路径失败:', error)
     filePath = null
   }
   if (!filePath) return false

@@ -32,32 +32,6 @@ fn pin_image_data_map() -> &'static Mutex<HashMap<String, PinImageData>> {
     PIN_IMAGE_DATA_MAP.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-// 更新贴图图片文件路径
-#[allow(dead_code)]
-pub fn update_pin_image_file(label: &str, new_file_path: String) {
-    let mut map = pin_image_data_map().lock();
-    if let Some(data) = map.get_mut(label) {
-        data.file_path = new_file_path;
-    }
-}
-
-// 更新贴图图片数据
-#[allow(dead_code)]
-pub fn update_pin_image_data(
-    label: &str, 
-    new_file_path: String,
-    original_image_path: Option<String>,
-    edit_data: Option<String>,
-) {
-    let mut map = pin_image_data_map().lock();
-    if let Some(data) = map.get_mut(label) {
-        data.file_path = new_file_path;
-        data.original_image_path = original_image_path;
-        data.edit_data = edit_data;
-    }
-}
-
-
 // 从文件路径创建贴图窗口
 #[tauri::command]
 pub async fn pin_image_from_file(

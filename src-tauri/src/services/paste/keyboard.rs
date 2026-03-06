@@ -29,6 +29,37 @@ fn send_key(vk: u16, up: bool) {
     unsafe { SendInput(&[input], std::mem::size_of::<INPUT>() as i32); }
 }
 
+#[cfg(target_os = "windows")]
+fn click_key(vk: u16) {
+    let down = INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(vk),
+                wScan: 0,
+                dwFlags: KEYBD_EVENT_FLAGS(0),
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+
+    let up = INPUT {
+        r#type: INPUT_KEYBOARD,
+        Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
+            ki: KEYBDINPUT {
+                wVk: windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(vk),
+                wScan: 0,
+                dwFlags: KEYEVENTF_KEYUP,
+                time: 0,
+                dwExtraInfo: 0,
+            },
+        },
+    };
+
+    unsafe { SendInput(&[down, up], std::mem::size_of::<INPUT>() as i32); }
+}
+
 // 释放所有修饰键（Alt、Ctrl、Shift、Win）
 pub fn release_modifier_keys() -> Result<(), String> {
     let mut enigo = Enigo::new(&Settings::default())
@@ -135,10 +166,8 @@ fn simulate_paste_ctrl_v() -> Result<(), String> {
     // 发送 Ctrl+V
     let user_ctrl = is_key_pressed(VK_CONTROL.0);
     let _ctrl_guard = KeyGuard::new(VK_CONTROL.0, !user_ctrl);
-    
-    send_key(VK_V.0, false);
-    std::thread::sleep(std::time::Duration::from_millis(8));
-    send_key(VK_V.0, true);
+
+    click_key(VK_V.0);
     
     drop(_ctrl_guard);
 
@@ -164,13 +193,8 @@ pub fn simulate_paste() -> Result<(), String> {
             .map_err(|e| format!("按下Ctrl失败: {}", e))?;
     }
     
-    enigo.key(Key::Unicode('v'), Direction::Press)
+    enigo.key(Key::Unicode('v'), Direction::Click)
         .map_err(|e| format!("按下V失败: {}", e))?;
-    
-    std::thread::sleep(std::time::Duration::from_millis(8));
-    
-    enigo.key(Key::Unicode('v'), Direction::Release)
-        .map_err(|e| format!("释放V失败: {}", e))?;
     
     if !ctrl_pressed {
         enigo.key(Key::Control, Direction::Release)

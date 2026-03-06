@@ -25,6 +25,26 @@ function DataManagementSection() {
   const [migrationDialog, setMigrationDialog] = useState(null); // { type: 'change' | 'reset', targetPath?: string, targetInfo?: object }
   const [backupDialog, setBackupDialog] = useState(null); // { backups: [] }
 
+  const warnNonCriticalError = (action, error) => {
+    console.warn(`${action}失败:`, error)
+  }
+
+  const reloadAllWindowsSafely = async (action) => {
+    try {
+      await reloadAllWindows()
+    } catch (error) {
+      warnNonCriticalError(action, error)
+    }
+  }
+
+  const clearLocalStorageSafely = (action) => {
+    try {
+      window.localStorage?.clear?.()
+    } catch (error) {
+      warnNonCriticalError(action, error)
+    }
+  }
+
   const formatSize = (bytes) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -42,7 +62,9 @@ function DataManagementSection() {
       try {
         const p = await isPortableMode();
         setPortable(!!p);
-      } catch (_) {}
+      } catch (error) {
+        warnNonCriticalError('检查便携模式', error)
+      }
     })();
   }, []);
 
@@ -108,7 +130,7 @@ function DataManagementSection() {
       const latest = await getCurrentStoragePath();
       setStoragePath(latest);
       await showMessage(t('settings.dataManagement.importSuccess', { path: resultPath }));
-      try { await reloadAllWindows(); } catch (_) {}
+      await reloadAllWindowsSafely('导入数据后刷新窗口')
     } catch (e) {
       await showError(t('settings.dataManagement.importFailed', { message: e?.message || e }));
     } finally {
@@ -122,7 +144,9 @@ function DataManagementSection() {
       if (storagePath && typeof storagePath === 'string') {
         await openPath(storagePath);
       }
-    } catch (e) {}
+    } catch (e) {
+      await showError(t('settings.dataManagement.openFolderFailed', { defaultValue: `打开目录失败: ${e?.message || e}` }))
+    }
   };
 
   const handleChangeStorageLocation = async () => {
@@ -144,7 +168,7 @@ function DataManagementSection() {
       const latest = await getCurrentStoragePath();
       setStoragePath(latest);
       await showMessage(t('settings.dataManagement.updateSuccess'));
-      try { await reloadAllWindows(); } catch (_) {}
+      await reloadAllWindowsSafely('更改存储位置后刷新窗口')
     } catch (e) {
       await showError(t('settings.dataManagement.changeFailed', { message: e?.message || e }));
     }
@@ -175,7 +199,7 @@ function DataManagementSection() {
       await showMessage(dialog.type === 'change'
         ? t('settings.dataManagement.updateSuccess')
         : t('settings.dataManagement.resetSuccess'));
-      try { await reloadAllWindows(); } catch (_) {}
+      await reloadAllWindowsSafely('迁移存储位置后刷新窗口')
     } catch (e) {
       const errorKey = dialog.type === 'change'
         ? 'settings.dataManagement.changeFailed'
@@ -210,7 +234,7 @@ function DataManagementSection() {
       const latest = await getCurrentStoragePath();
       setStoragePath(latest);
       await showMessage(t('settings.dataManagement.resetSuccess'));
-      try { await reloadAllWindows(); } catch (_) {}
+      await reloadAllWindowsSafely('重置存储位置后刷新窗口')
     } catch (e) {
       await showError(t('settings.dataManagement.resetFailed', { message: e?.message || e }));
     }
@@ -228,7 +252,7 @@ function DataManagementSection() {
       setBusy(true);
       await clearClipboardHistory();
       await showMessage(t('settings.dataManagement.clearSuccess') || t('common.success'));
-      try { await reloadAllWindows(); } catch (_) {}
+      await reloadAllWindowsSafely('清空历史后刷新窗口')
     } catch (e) {
       await showError(t('settings.dataManagement.clearFailed', { message: e?.message || e }) || String(e));
     } finally {
@@ -244,9 +268,9 @@ function DataManagementSection() {
       setBusyText(t('settings.dataManagement.overlayResetSettings') || t('settings.dataManagement.overlayMigrating'));
       setBusy(true);
       await resetSettingsToDefault();
-      try { window.localStorage?.clear?.(); } catch (_) {}
+      clearLocalStorageSafely('重置设置时清理本地缓存')
       await showMessage(t('settings.dataManagement.resetSettingsSuccess') || t('common.success'));
-      try { await reloadAllWindows(); } catch (_) {}
+      await reloadAllWindowsSafely('重置设置后刷新窗口')
     } catch (e) {
       await showError(t('settings.dataManagement.resetSettingsFailed', { message: e?.message || e }) || String(e));
     } finally {
@@ -262,11 +286,11 @@ function DataManagementSection() {
       setBusyText(t('settings.dataManagement.overlayResetAll') || t('settings.dataManagement.overlayMigrating'));
       setBusy(true);
       const dir = await resetAllData();
-      try { window.localStorage?.clear?.(); } catch (_) {}
+      clearLocalStorageSafely('重置全部数据时清理本地缓存')
       const latest = await getCurrentStoragePath();
       setStoragePath(latest);
       await showMessage(t('settings.dataManagement.resetAllSuccess', { path: dir }) || t('common.success'));
-      try { await reloadAllWindows(); } catch (_) {}
+      await reloadAllWindowsSafely('重置全部数据后刷新窗口')
     } catch (e) {
       await showError(t('settings.dataManagement.resetAllFailed', { message: e?.message || e }) || String(e));
     } finally {

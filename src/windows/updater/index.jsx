@@ -78,10 +78,18 @@ function App() {
           }
           waitForUpdate()
         }
-      } catch (_) {}
+      } catch (error) {
+        console.error('处理更新配置失败:', error)
+      }
     })
-    emit('updater-ready').catch(() => {})
-    return () => { unlisten.then(f => f()).catch(() => {}) }
+    emit('updater-ready').catch(error => {
+      console.warn('通知更新器已就绪失败:', error)
+    })
+    return () => {
+      unlisten.then(f => f()).catch(error => {
+        console.warn('清理更新配置监听失败:', error)
+      })
+    }
   }, [])
 
   useEffect(() => {
@@ -163,7 +171,11 @@ function App() {
       await exit(0)
     } else {
       const w = getCurrentWebviewWindow()
-      try { await w.close() } catch (_) {}
+      try {
+        await w.close()
+      } catch (error) {
+        console.warn('关闭更新窗口失败:', error)
+      }
     }
   }, [forceUpdate])
 
@@ -262,7 +274,11 @@ function App() {
             <button
               onClick={async () => {
                 const w = getCurrentWebviewWindow();
-                try { await w.hide(); } catch (_) {}
+                try {
+                  await w.hide();
+                } catch (error) {
+                  console.warn('隐藏更新窗口失败:', error)
+                }
               }}
               className="px-3 py-2 rounded bg-gray-200 dark:bg-gray-700 text-sm"
             >

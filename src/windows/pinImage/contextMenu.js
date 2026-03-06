@@ -100,7 +100,6 @@ async function copyImageToClipboard() {
         }
         
         await invoke('copy_image_to_clipboard', { filePath: data.file_path });
-        console.log('图片已复制到剪贴板');
     } catch (error) {
         console.error('复制图片失败:', error);
     }

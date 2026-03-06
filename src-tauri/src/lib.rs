@@ -209,7 +209,6 @@ pub fn run() {
             ])
         
     .setup(|app| {
-                services::store::init(app.handle());
                 #[cfg(desktop)]
                 {
                     use tauri_plugin_autostart::MacosLauncher;
