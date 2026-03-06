@@ -1,6 +1,5 @@
-use serde::Deserialize;
 use crate::services::image_library;
-use std::time::Duration;
+use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct SaveImagePayload {
@@ -44,10 +43,9 @@ pub async fn il_save_image(payload: SaveImagePayload) -> Result<image_library::I
     let data = payload.data;
 
     let handle = tokio::task::spawn_blocking(move || image_library::save_image(&filename, &data));
-    match tokio::time::timeout(Duration::from_secs(15), handle).await {
-        Ok(join_result) => join_result.map_err(|e| format!("任务执行失败: {}", e))?,
-        Err(_) => Err("保存图片超时".to_string()),
-    }
+    handle
+        .await
+        .map_err(|error| format!("图片保存任务执行失败: {}", error))?
 }
 
 #[tauri::command]
