@@ -3,7 +3,6 @@ import {
   saveSettings as saveSettingsApi,
   setEdgeHideEnabled as setEdgeHideEnabledApi,
   getAllWindowsInfo,
-  hideMainWindowIfAutoShown,
   getAppVersion as getAppVersionApi,
   isPortableMode as isPortableModeApi
 } from '@shared/api'
@@ -177,15 +176,6 @@ export async function getAllWindowsInfoService() {
   } catch (error) {
     console.error('获取应用列表失败:', error)
     return []
-  }
-}
-
-// 隐藏主窗口
-export async function hideMainWindowIfAutoShownService() {
-  try {
-    await hideMainWindowIfAutoShown()
-  } catch (error) {
-    console.error('隐藏主窗口失败:', error)
   }
 }
 

@@ -85,7 +85,6 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_drag::init())
@@ -93,8 +92,6 @@ pub fn run() {
     
     builder.invoke_handler(tauri::generate_handler![
                 commands::start_custom_drag,
-                commands::stop_custom_drag,
-                commands::toggle_main_window,
                 commands::hide_main_window,
                 commands::show_main_window,
                 commands::check_window_snap,
@@ -104,9 +101,7 @@ pub fn run() {
                 commands::focus_clipboard_window,
                 commands::save_current_focus,
                 commands::restore_last_focus,
-                commands::hide_main_window_if_auto_shown,
                 commands::set_window_pinned,
-                commands::toggle_window_visibility,
                 commands::open_settings_window,
                 commands::open_text_editor_window,
                 commands::emit_clipboard_updated,
@@ -151,7 +146,6 @@ pub fn run() {
                 commands::get_all_windows_info_cmd,
                 commands::is_portable_mode,
                 commands::get_app_version,
-                commands::get_data_directory_cmd,
                 commands::set_auto_start,
                 commands::get_auto_start_status,
                 commands::set_run_as_admin,
@@ -159,12 +153,10 @@ pub fn run() {
                 commands::is_running_as_admin,
                 commands::is_admin_task_ready,
                 commands::restart_as_admin,
-                commands::reload_hotkeys,
                 commands::enable_hotkeys,
                 commands::disable_hotkeys,
                 commands::is_hotkeys_enabled,
                 commands::get_shortcut_statuses,
-                commands::get_shortcut_status,
                 commands::save_window_position,
                 commands::save_window_size,
                 commands::save_quickpaste_window_size,
@@ -180,9 +172,6 @@ pub fn run() {
                 commands::set_mouse_position,
                 commands::get_mouse_position,
                 commands::copy_text_to_clipboard,
-                commands::check_win_v_hotkey_disabled,
-                commands::disable_win_v_hotkey_and_restart,
-                commands::enable_win_v_hotkey_and_restart,
                 commands::prompt_disable_win_v_hotkey_if_needed,
                 commands::prompt_enable_win_v_hotkey,
                 commands::enter_low_memory_mode,

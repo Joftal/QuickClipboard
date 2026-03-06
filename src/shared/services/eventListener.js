@@ -19,11 +19,6 @@ export async function setupClipboardEventListener() {
     })
     unlisteners.push(unlisten2)
 
-    const unlisten3 = await listen('refreshQuickTexts', () => {
-      refreshFavorites()
-    })
-    unlisteners.push(unlisten3)
-
   } catch (error) {
     console.error('设置事件监听失败:', error)
   }

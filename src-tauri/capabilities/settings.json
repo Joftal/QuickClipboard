@@ -28,19 +28,6 @@
     "dialog:default",
     "updater:default",
     "updater:allow-check",
-    "updater:allow-download-and-install",
-    "http:default",
-    "http:allow-fetch",
-    {
-      "identifier": "http:default",
-      "allow": [
-        {
-          "url": "https://github.com/**"
-        },
-        {
-          "url": "https://api.github.com/**"
-        }
-      ]
-    }
+    "updater:allow-download-and-install"
   ]
 }

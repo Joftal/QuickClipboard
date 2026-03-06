@@ -21,21 +21,6 @@ export async function recognizeImageOcr(filePath, language = null) {
   return await invoke('recognize_file_ocr', { filePath, language })
 }
 
-// 检查系统 Win+V 快捷键是否已禁用
-export async function checkWinVHotkeyDisabled() {
-  return await invoke('check_win_v_hotkey_disabled')
-}
-
-// 禁用系统 Win+V 快捷键并重启资源管理器
-export async function disableWinVHotkeyAndRestart() {
-  return await invoke('disable_win_v_hotkey_and_restart')
-}
-
-// 启用系统 Win+V 快捷键并重启资源管理器
-export async function enableWinVHotkeyAndRestart() {
-  return await invoke('enable_win_v_hotkey_and_restart')
-}
-
 export async function promptDisableWinVHotkeyIfNeeded() {
   return await invoke('prompt_disable_win_v_hotkey_if_needed')
 }

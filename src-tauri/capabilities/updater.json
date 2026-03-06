@@ -18,20 +18,7 @@
     "updater:allow-check",
     "updater:allow-download-and-install",
     "process:allow-exit",
-    "process:allow-restart",
-    "http:default",
-    "http:allow-fetch",
-    {
-      "identifier": "http:default",
-      "allow": [
-        {
-          "url": "https://github.com/**"
-        },
-        {
-          "url": "https://api.github.com/**"
-        }
-      ]
-    }
+    "process:allow-restart"
   ]
 }
 

@@ -22,24 +22,6 @@ pub fn copy_text_to_clipboard(text: String) -> Result<(), String> {
     set_clipboard_text(&ctx, &text)
 }
 
-// 检查 Win+V 是否已在系统中被禁用
-#[tauri::command]
-pub fn check_win_v_hotkey_disabled() -> Result<bool, String> {
-    Ok(crate::services::system::win_v_hotkey::is_win_v_hotkey_disabled())
-}
-
-// 禁用系统 Win+V 快捷键并重启资源管理器
-#[tauri::command]
-pub fn disable_win_v_hotkey_and_restart() -> Result<(), String> {
-    crate::services::system::win_v_hotkey::disable_win_v_hotkey()
-}
-
-// 启用系统 Win+V 快捷键并重启资源管理器
-#[tauri::command]
-pub fn enable_win_v_hotkey_and_restart() -> Result<(), String> {
-    crate::services::system::win_v_hotkey::enable_win_v_hotkey()
-}
-
 #[tauri::command]
 pub fn prompt_disable_win_v_hotkey_if_needed(app: tauri::AppHandle) -> Result<bool, String> {
     if crate::services::system::win_v_hotkey::is_win_v_hotkey_disabled() {

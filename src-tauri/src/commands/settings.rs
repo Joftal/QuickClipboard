@@ -1,4 +1,4 @@
-use crate::services::{AppSettings, get_settings, update_settings, get_data_directory};
+use crate::services::{AppSettings, get_settings, update_settings};
 use crate::services::settings::storage::SettingsStorage;
 use tauri::Manager;
 use serde_json::Value;
@@ -121,13 +121,6 @@ pub fn get_app_version() -> Result<Value, String> {
     }))
 }
 
-// 获取数据目录路径
-#[tauri::command]
-pub fn get_data_directory_cmd() -> Result<String, String> {
-    let path = get_data_directory()?;
-    Ok(path.to_string_lossy().to_string())
-}
-
 // 设置开机自启动
 #[tauri::command]
 pub fn set_auto_start(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
@@ -182,12 +175,6 @@ pub fn get_auto_start_status(app: tauri::AppHandle) -> Result<bool, String> {
     }
 }
 
-// 重新加载快捷键
-#[tauri::command]
-pub fn reload_hotkeys() -> Result<(), String> {
-    crate::hotkey::reload_from_settings()
-}
-
 // 启用快捷键
 #[tauri::command]
 pub fn enable_hotkeys() -> Result<(), String> {
@@ -211,12 +198,6 @@ pub fn is_hotkeys_enabled() -> bool {
 #[tauri::command]
 pub fn get_shortcut_statuses() -> Vec<crate::hotkey::ShortcutStatus> {
     crate::hotkey::get_shortcut_statuses()
-}
-
-// 获取单个快捷键状态
-#[tauri::command]
-pub fn get_shortcut_status(id: String) -> Option<crate::hotkey::ShortcutStatus> {
-    crate::hotkey::get_shortcut_status(&id)
 }
 
 // 切换剪贴板监听状态
