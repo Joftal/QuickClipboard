@@ -2,6 +2,7 @@ import {
   setWindowPinned,
   openSettingsWindow
 } from '@shared/api'
+import { settingsStore } from '@shared/store/settingsStore'
 
 // 不持久化的临时工具状态
 const temporaryTools = ['pin-button']
@@ -118,7 +119,6 @@ export const toolActions = {
     
     try {
       // 保存到配置文件
-      const { settingsStore } = await import('@shared/store/settingsStore')
       await settingsStore.saveSetting('pasteWithFormat', newState, { showToast: false })
       
       // 同步到 localStorage 缓存

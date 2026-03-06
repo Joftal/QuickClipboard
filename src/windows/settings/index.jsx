@@ -1,5 +1,5 @@
 import ReactDOM from 'react-dom/client';
-import 'uno.css';
+import '@shared/styles/uno';
 import '@unocss/reset/tailwind.css';
 import '@shared/styles/index.css';
 import '@shared/i18n';

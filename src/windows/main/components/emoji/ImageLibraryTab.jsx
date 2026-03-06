@@ -7,8 +7,9 @@ import { restoreLastFocus } from '@shared/api/window';
 import { Virtuoso } from 'react-virtuoso';
 import { useCustomScrollbar } from '@shared/hooks/useCustomScrollbar';
 import * as imageLibrary from '@shared/api/imageLibrary';
-import { IMAGE_COLS } from './emojiData';
 import RenameDialog from './RenameDialog';
+
+const IMAGE_COLS = 2;
 
 async function readFileInChunks(file, chunkSize = 1024 * 1024) {
   const chunks = [];

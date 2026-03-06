@@ -1,4 +1,4 @@
-import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+﻿import '@shared/styles/tabler-icons-woff2.css';
 import { useEffect, useState } from 'react';
 import { TOAST_POSITIONS, TOAST_SIZES } from '@shared/store/toastStore';
 function Toast({

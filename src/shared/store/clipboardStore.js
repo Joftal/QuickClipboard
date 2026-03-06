@@ -1,5 +1,6 @@
 import { proxy } from 'valtio'
 import { listen } from '@tauri-apps/api/event'
+import { getToolState } from '@shared/services/toolActions'
 import { 
   getClipboardHistory, 
   getClipboardTotalCount,
@@ -263,9 +264,23 @@ export async function clearClipboardHistory() {
 }
 
 // 粘贴剪贴板项
-export async function pasteClipboardItem(id) {
+export async function pasteClipboardItem(id, format = null) {
   try {
-    await apiPasteClipboardItem(id)
+    await apiPasteClipboardItem(id, format)
+
+    if (getToolState('one-time-paste-button')) {
+      try {
+        await apiDeleteItem(id)
+        setTimeout(() => {
+          refreshClipboardHistory().catch(error => {
+            console.error('一次性粘贴：刷新剪贴板列表失败:', error)
+          })
+        }, 200)
+      } catch (deleteError) {
+        console.error('一次性粘贴：删除失败', deleteError)
+      }
+    }
+
     return true
   } catch (err) {
     console.error('粘贴剪贴板项失败:', err)

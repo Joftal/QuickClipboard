@@ -1,7 +1,7 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+﻿import { useRef, useEffect, useCallback, useState } from 'react';
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
-import '@tabler/icons-webfont/dist/tabler-icons.min.css';
-import { pasteClipboardItem, clipboardStore, refreshClipboardHistory } from '@shared/store/clipboardStore';
+import '@shared/styles/tabler-icons-woff2.css';
+import { deleteClipboardItem, pasteClipboardItem, clipboardStore, refreshClipboardHistory } from '@shared/store/clipboardStore';
 import { useItemCommon } from '@shared/hooks/useItemCommon.jsx';
 import { useTextPreview } from '@shared/hooks/useTextPreview';
 import { useSortable, CSS } from '@shared/hooks/useSortable';
@@ -234,9 +234,6 @@ function ClipboardItem({
     }
     
     try {
-      const {
-        deleteClipboardItem
-      } = await import('@shared/store/clipboardStore');
       await deleteClipboardItem(item.id);
       toast.success(t('common.deleted'), {
         size: TOAST_SIZES.EXTRA_SMALL,
@@ -443,3 +440,4 @@ function ClipboardItem({
     </div>;
 }
 export default ClipboardItem;
+

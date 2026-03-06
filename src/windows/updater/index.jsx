@@ -1,5 +1,5 @@
-import '@tabler/icons-webfont/dist/tabler-icons.min.css'
-import 'uno.css';
+﻿import '@shared/styles/tabler-icons-woff2.css'
+import '@shared/styles/uno'
 import '@unocss/reset/tailwind.css';
 import { listen, emit } from '@tauri-apps/api/event'
 import { relaunch, exit } from '@tauri-apps/plugin-process'
@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next'
 import '@shared/styles/index.css'
 import { initStores } from '@shared/store'
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
-import logoIcon from '@/assets/icon1024.png';
+import logoIcon from '@/assets/icon128.png';
 function App() {
   const { t, i18n } = useTranslation()
   const [forceUpdate, setForceUpdate] = useState(false)
@@ -297,3 +297,6 @@ function App() {
 initStores().then(() => {
   createRoot(document.getElementById('root')).render(<App />)
 })
+
+
+

@@ -189,7 +189,6 @@ const FavoritesList = forwardRef(({
       const item = itemsWithId[currentSelectedIndex];
       if (item && !item._isPlaceholder) {
         try {
-          const { pasteFavorite } = await import('@shared/api/favorites');
           await pasteFavorite(item.id, 'plain');
         } catch (error) {
           console.error('纯文本粘贴收藏失败:', error);

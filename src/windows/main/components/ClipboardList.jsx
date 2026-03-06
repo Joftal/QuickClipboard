@@ -195,7 +195,6 @@ const ClipboardList = forwardRef(({
       const item = itemsWithId[currentSelectedIndex];
       if (item && !item._isPlaceholder) {
         try {
-          const { pasteClipboardItem } = await import('@shared/api/clipboard');
           await pasteClipboardItem(item.id, 'plain');
           const oneTimeEnabled = getToolState('one-time-paste-button');
           if (settings.pasteToTop && !oneTimeEnabled && item.id && !item.is_pinned) {

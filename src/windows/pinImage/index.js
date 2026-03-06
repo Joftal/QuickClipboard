@@ -1,6 +1,6 @@
-//贴图窗口主入口
+﻿//贴图窗口主入口
 
-import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+import '@shared/styles/tabler-icons-woff2.css';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { loadSettings, saveSettings } from './settings.js';
@@ -176,4 +176,5 @@ import {
         console.error('加载图片失败:', error);
     }
 })();
+
 

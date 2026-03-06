@@ -17,8 +17,13 @@ import {
   moveClipboardItemToTop,
   copyClipboardItem
 } from '@shared/api'
+import { copyFavoriteItem } from '@shared/api/favorites'
+import { openEditorForClipboard, openEditorForFavorite } from '@shared/api/textEditor'
 import { getToolState } from '@shared/services/toolActions'
-import { clipboardStore } from '@shared/store/clipboardStore'
+import { clipboardStore, deleteClipboardItem, loadClipboardItems, pasteClipboardItem } from '@shared/store/clipboardStore'
+import { refreshFavorites, pasteFavorite } from '@shared/store/favoritesStore'
+import { groupsStore } from '@shared/store/groupsStore'
+import { showConfirm } from '@shared/utils/dialog'
 
 const TOAST_CONFIG = {
   size: TOAST_SIZES.EXTRA_SMALL,
@@ -75,11 +80,7 @@ async function handlePasteActions(result, item, isClipboard = true, index = unde
   
   if (!(result in pasteActions)) return false
   
-  const { pasteClipboardItem } = isClipboard 
-    ? await import('@shared/api/clipboard')
-    : await import('@shared/api/favorites')
-  
-  const pasteFunc = isClipboard ? pasteClipboardItem : (await import('@shared/api/favorites')).pasteFavorite
+  const pasteFunc = isClipboard ? pasteClipboardItem : pasteFavorite
   await pasteFunc(item.id, pasteActions[result])
 
   // 粘贴后置顶
@@ -99,12 +100,10 @@ async function handlePasteActions(result, item, isClipboard = true, index = unde
 // 处理内容类型操作
 async function handleContentTypeActions(result, item, index) {
   if (result === 'edit-text') {
-    const { openEditorForClipboard } = await import('@shared/api/textEditor')
     await openEditorForClipboard(item, index)
     return true
   }
   if (result === 'edit-item') {
-    const { openEditorForFavorite } = await import('@shared/api/textEditor')
     await openEditorForFavorite(item)
     return true
   }
@@ -213,7 +212,6 @@ export async function showClipboardItemContextMenu(event, item, index) {
   }
 
   // 添加"添加到收藏"菜单
-  const { groupsStore } = await import('@shared/store/groupsStore')
   const groups = groupsStore.groups || []
 
   const addToFavoritesItem = createMenuItem('add-to-favorites', i18n.t('contextMenu.addToFavorites'), { icon: 'ti ti-star' })
@@ -270,20 +268,17 @@ export async function showClipboardItemContextMenu(event, item, index) {
     // 处理其他操作
     switch (result) {
       case 'delete-item':
-        const { deleteClipboardItem } = await import('@shared/store/clipboardStore')
         await deleteClipboardItem(item.id)
         toast.success(i18n.t('common.deleted'), TOAST_CONFIG)
         break
 
       case 'clear-all':
-        const { showConfirm } = await import('@shared/utils/dialog')
         const confirmed = await showConfirm(
           i18n.t('contextMenu.clearAllConfirm'),
           i18n.t('contextMenu.clearAllConfirmTitle')
         )
         if (confirmed) {
           await clearClipboardHistory()
-          const { loadClipboardItems } = await import('@shared/store/clipboardStore')
           await loadClipboardItems()
           toast.success(i18n.t('contextMenu.allCleared'), TOAST_CONFIG)
         }
@@ -313,7 +308,6 @@ export async function showFavoriteItemContextMenu(event, item, index) {
   }
 
   // 添加"移动到分组"菜单
-  const { groupsStore } = await import('@shared/store/groupsStore')
   const groups = groupsStore.groups || []
 
   const moveToGroupItem = createMenuItem('move-to-group', i18n.t('contextMenu.moveToGroup'), { icon: 'ti ti-folder' })
@@ -342,7 +336,6 @@ export async function showFavoriteItemContextMenu(event, item, index) {
   try {
     // 处理复制操作
     if (result === 'copy-item') {
-      const { copyFavoriteItem } = await import('@shared/api/favorites')
       await copyFavoriteItem(item.id)
       toast.success(i18n.t('contextMenu.copied'), TOAST_CONFIG)
       return
@@ -352,7 +345,6 @@ export async function showFavoriteItemContextMenu(event, item, index) {
     if (await handlePasteActions(result, item, false, index)) return
 
     if (result === 'edit-text') {
-      const { openEditorForFavorite } = await import('@shared/api/textEditor')
       await openEditorForFavorite(item)
       return
     }
@@ -361,7 +353,6 @@ export async function showFavoriteItemContextMenu(event, item, index) {
     if (result.startsWith('move-to-group-')) {
       const groupName = result.substring(14)
       await moveFavoriteToGroup(item.id, groupName)
-      const { refreshFavorites } = await import('@shared/store/favoritesStore')
       await refreshFavorites()
       toast.success(i18n.t('contextMenu.movedToGroup'), TOAST_CONFIG)
       return
@@ -372,14 +363,12 @@ export async function showFavoriteItemContextMenu(event, item, index) {
 
     // 处理删除操作
     if (result === 'delete-item') {
-      const { showConfirm } = await import('@shared/utils/dialog')
       const confirmed = await showConfirm(
         i18n.t('favorites.confirmDelete'),
         i18n.t('favorites.confirmDeleteTitle')
       )
       if (confirmed) {
         await deleteFavorite(item.id)
-        const { refreshFavorites } = await import('@shared/store/favoritesStore')
         await refreshFavorites()
         toast.success(i18n.t('common.deleted'), TOAST_CONFIG)
       }

@@ -1,6 +1,6 @@
-import { useRef, useEffect, useCallback, useState } from 'react';
+﻿import { useRef, useEffect, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+import '@shared/styles/tabler-icons-woff2.css';
 import { pasteFavorite, refreshFavorites } from '@shared/store/favoritesStore';
 import { useItemCommon } from '@shared/hooks/useItemCommon.jsx';
 import { useTextPreview } from '@shared/hooks/useTextPreview';
@@ -428,3 +428,4 @@ function FavoriteItem({
   </div>;
 }
 export default FavoriteItem;
+

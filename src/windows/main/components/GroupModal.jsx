@@ -1,4 +1,4 @@
-import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+﻿import '@shared/styles/tabler-icons-woff2.css';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { addGroup, updateGroup } from '@shared/store/groupsStore';

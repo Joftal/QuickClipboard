@@ -1,4 +1,4 @@
-import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+﻿import '@shared/styles/tabler-icons-woff2.css';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -333,3 +333,4 @@ async function sendMenuRegionsToBackend() {
 }
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideMenu(null); });
+

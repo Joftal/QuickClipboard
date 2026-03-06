@@ -1,7 +1,7 @@
 import ReactDOM from 'react-dom/client';
 import { emit } from '@tauri-apps/api/event';
 import { subscribeKey } from 'valtio/utils';
-import 'uno.css';
+import '@shared/styles/uno';
 import '@unocss/reset/tailwind.css';
 import '@shared/styles/index.css';
 import '@shared/i18n';

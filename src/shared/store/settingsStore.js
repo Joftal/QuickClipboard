@@ -1,4 +1,5 @@
 import { proxy } from 'valtio'
+import i18n from '@shared/i18n'
 import { 
   defaultSettings, 
   loadSettingsFromBackend, 
@@ -137,7 +138,6 @@ export async function initSettings() {
   await settingsStore.loadSettings()
  
   if (settingsStore.language) {
-    const i18n = (await import('@shared/i18n')).default
     await i18n.changeLanguage(settingsStore.language)
   }
 }

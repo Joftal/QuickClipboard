@@ -1,11 +1,15 @@
 import { proxy } from 'valtio'
 import { listen } from '@tauri-apps/api/event'
+import i18n from '@shared/i18n'
+import { groupsStore } from './groupsStore'
+import { getToolState } from '@shared/services/toolActions'
 import { 
   getFavoritesHistory,
   getFavoritesTotalCount,
   deleteFavorite as apiDeleteFavorite,
   pasteFavorite as apiPasteFavorite
 } from '@shared/api/favorites'
+import { showConfirm } from '@shared/utils/dialog'
 
 listen('favorite-paste-count-updated', (event) => {
   const id = event.payload
@@ -171,7 +175,6 @@ export async function loadFavoritesRange(startIndex, endIndex, groupName = null)
   try {
     // 如果没有指定分组，从 groupsStore 获取当前分组
     if (!groupName) {
-      const { groupsStore } = await import('./groupsStore')
       groupName = groupsStore.currentGroup
     }
     
@@ -207,7 +210,6 @@ export async function initFavorites(groupName = null) {
   try {
     // 如果没有指定分组，从 groupsStore 获取当前分组
     if (!groupName) {
-      const { groupsStore } = await import('./groupsStore')
       groupName = groupsStore.currentGroup
     }
     
@@ -252,8 +254,6 @@ export async function refreshFavorites(groupName = null) {
 // 删除收藏项
 export async function deleteFavorite(id) {
   try {
-    const { showConfirm } = await import('@shared/utils/dialog')
-    const i18n = (await import('@shared/i18n')).default
     const confirmed = await showConfirm(
       i18n.t('favorites.confirmDelete'),
       i18n.t('favorites.confirmDeleteTitle')
@@ -273,9 +273,23 @@ export async function deleteFavorite(id) {
 }
 
 // 粘贴收藏项
-export async function pasteFavorite(id) {
+export async function pasteFavorite(id, format = null) {
   try {
-    await apiPasteFavorite(id)
+    await apiPasteFavorite(id, format)
+
+    if (getToolState('one-time-paste-button')) {
+      try {
+        await apiDeleteFavorite(id)
+        setTimeout(() => {
+          refreshFavorites().catch(error => {
+            console.error('一次性粘贴：刷新收藏列表失败:', error)
+          })
+        }, 200)
+      } catch (deleteError) {
+        console.error('一次性粘贴：删除收藏项失败', deleteError)
+      }
+    }
+
     return true
   } catch (err) {
     console.error('粘贴收藏项失败:', err)

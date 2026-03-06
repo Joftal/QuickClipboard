@@ -1,4 +1,4 @@
-import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+﻿import '@shared/styles/tabler-icons-woff2.css';
 import { useTranslation } from 'react-i18next';
 import { useSnapshot } from 'valtio';
 import { settingsStore } from '@shared/store/settingsStore';
@@ -97,3 +97,4 @@ function AppearanceSection({
     </SettingsSection>;
 }
 export default AppearanceSection;
+

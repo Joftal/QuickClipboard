@@ -1,4 +1,4 @@
-import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+﻿import '@shared/styles/tabler-icons-woff2.css';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import './SettingsSearch.css';
@@ -236,3 +236,4 @@ function SettingsSearch({ onNavigate, className = '' }) {
 }
 
 export default SettingsSearch;
+

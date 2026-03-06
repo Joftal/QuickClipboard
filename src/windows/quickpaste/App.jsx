@@ -157,7 +157,7 @@ function QuickPasteWindow() {
   useEffect(() => {
     const unlisten = listen('navigation-changed', async event => {
       const { activeTab, currentGroup } = event.payload;
-      navigationStore.activeTab = activeTab;
+      navigationStore.activeTab = activeTab === 'clipboard' ? 'clipboard' : 'favorites';
       if (currentGroup !== undefined) {
         groupsStore.currentGroup = currentGroup;
       }

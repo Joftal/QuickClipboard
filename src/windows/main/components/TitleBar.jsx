@@ -1,4 +1,4 @@
-import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+﻿import '@shared/styles/tabler-icons-woff2.css';
 import { useTranslation } from 'react-i18next';
 import { useSnapshot } from 'valtio';
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
@@ -7,7 +7,7 @@ import { toolsStore } from '@shared/store/toolsStore';
 import { useSortableList, useSortable, CSS } from '@shared/hooks/useSortable';
 import { DragOverlay, useDroppable } from '@dnd-kit/core';
 import { MAX_TITLEBAR_TOOLS } from '@shared/config/tools';
-import logoIcon from '@/assets/icon1024.png';
+import logoIcon from '@/assets/icon128.png';
 import ToolButton from './ToolButton';
 import TitleBarSearch from './TitleBarSearch';
 
@@ -57,6 +57,7 @@ const TitleBar = forwardRef(({
   onSearchChange,
   searchPlaceholder,
   onNavigate,
+  showSearch = true,
   position = 'top'
 }, ref) => {
   const {
@@ -174,7 +175,7 @@ const TitleBar = forwardRef(({
       {/* 搜索 + 工具按钮容器 */}
       <div className={`flex ${isVertical ? 'flex-col items-center gap-2' : 'flex-row items-center gap-1'} relative ${isVertical ? '' : 'flex-shrink-0'}`} ref={containerRef}>
         {/* 搜索框 */}
-        <TitleBarSearch ref={searchRef} value={searchQuery} onChange={onSearchChange} placeholder={searchPlaceholder} onNavigate={onNavigate} isVertical={isVertical} position={position} />
+        {showSearch && <TitleBarSearch ref={searchRef} value={searchQuery} onChange={onSearchChange} placeholder={searchPlaceholder} onNavigate={onNavigate} isVertical={isVertical} position={position} />}
         <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
           <SortableContext items={allTools}>
             {/* 标题栏工具 */}
@@ -220,3 +221,5 @@ const TitleBar = forwardRef(({
 });
 TitleBar.displayName = 'TitleBar';
 export default TitleBar;
+
+

@@ -1,4 +1,4 @@
-import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+﻿import '@shared/styles/tabler-icons-woff2.css';
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { useInputFocus, focusWindowImmediately } from '@shared/hooks/useInputFocus';
 import { useSnapshot } from 'valtio';

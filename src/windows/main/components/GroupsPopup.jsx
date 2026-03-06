@@ -1,4 +1,4 @@
-import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+﻿import '@shared/styles/tabler-icons-woff2.css';
 import { useSnapshot } from 'valtio';
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -6,7 +6,8 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from 
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { restrictToVerticalAxis, restrictToParentElement } from '@dnd-kit/modifiers';
 import { CSS } from '@dnd-kit/utilities';
-import { groupsStore, reorderGroups } from '@shared/store/groupsStore';
+import { deleteGroup, groupsStore, reorderGroups } from '@shared/store/groupsStore';
+import { refreshFavorites } from '@shared/store/favoritesStore';
 import { settingsStore } from '@shared/store/settingsStore';
 import { showConfirm, showError } from '@shared/utils/dialog';
 import GroupModal from './GroupModal';
@@ -241,9 +242,7 @@ const GroupsPopup = forwardRef(({
       return;
     }
     try {
-      const { deleteGroup } = await import('@shared/store/groupsStore');
       await deleteGroup(groupName);
-      const { refreshFavorites } = await import('@shared/store/favoritesStore');
       await refreshFavorites();
     } catch (error) {
       console.error('删除分组失败:', error);
@@ -272,7 +271,6 @@ const GroupsPopup = forwardRef(({
         await reorderGroups(newGroups);
 
         if (groups.currentGroup === '全部') {
-          const { refreshFavorites } = await import('@shared/store/favoritesStore');
           await refreshFavorites();
         }
       } catch (error) {
@@ -404,7 +402,6 @@ const GroupsPopup = forwardRef(({
           onSave={async () => {
             setShowModal(false);
             setEditingGroup(null);
-            const { refreshFavorites } = await import('@shared/store/favoritesStore');
             await refreshFavorites();
           }}
         />
@@ -415,3 +412,4 @@ const GroupsPopup = forwardRef(({
 
 GroupsPopup.displayName = 'GroupsPopup';
 export default GroupsPopup;
+

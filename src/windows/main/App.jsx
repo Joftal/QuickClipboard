@@ -4,6 +4,7 @@ import { useSnapshot } from 'valtio';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { settingsStore } from '@shared/store/settingsStore';
+import { initFavorites } from '@shared/store/favoritesStore';
 import { groupsStore } from '@shared/store/groupsStore';
 import { navigationStore } from '@shared/store/navigationStore';
 import { toolsStore } from '@shared/store/toolsStore';
@@ -17,7 +18,7 @@ import TitleBar from './components/TitleBar';
 import TabNavigation from './components/TabNavigation';
 import ClipboardTab from './components/ClipboardTab';
 import FavoritesTab from './components/FavoritesTab';
-const EmojiTab = lazy(() => import('./components/EmojiTab'));
+const ImagesTab = lazy(() => import('./components/ImagesTab'));
 import FooterBar from './components/FooterBar';
 import GroupsPopup from './components/GroupsPopup';
 import ToastContainer from '@shared/components/common/ToastContainer';
@@ -37,7 +38,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('clipboard');
   const [contentFilter, setContentFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [emojiMode, setEmojiMode] = useState('emoji'); // 'emoji' | 'symbols' | 'images'
+  const [imageCategory, setImageCategory] = useState('images');
   const clipboardTabRef = useRef(null);
   const favoritesTabRef = useRef(null);
   const groupsPopupRef = useRef(null);
@@ -195,9 +196,6 @@ function App() {
     // 重置导航索引
     navigationStore.resetNavigation();
     // 重新加载收藏列表
-    const {
-      initFavorites
-    } = await import('@shared/store/favoritesStore');
     await initFavorites(groupName);
   };
 
@@ -225,7 +223,7 @@ function App() {
   };
   const handleTabLeft = () => {
     setActiveTab(currentTab => {
-      const tabs = ['clipboard', 'favorites', 'emoji'];
+      const tabs = ['clipboard', 'favorites', 'images'];
       const currentIndex = tabs.indexOf(currentTab);
       if (currentIndex === -1) return tabs[tabs.length - 1];
       return tabs[currentIndex === 0 ? tabs.length - 1 : currentIndex - 1];
@@ -233,7 +231,7 @@ function App() {
   };
   const handleTabRight = () => {
     setActiveTab(currentTab => {
-      const tabs = ['clipboard', 'favorites', 'emoji'];
+      const tabs = ['clipboard', 'favorites', 'images'];
       const currentIndex = tabs.indexOf(currentTab);
       if (currentIndex === -1) return tabs[0];
       return tabs[currentIndex === tabs.length - 1 ? 0 : currentIndex + 1];
@@ -325,12 +323,12 @@ function App() {
     ${isDark ? 'bg-gray-900' : ''}
     ${!isDark ? 'bg-white' : ''}
   `.trim().replace(/\s+/g, ' ');
-  const TitleBarComponent = <TitleBar ref={searchRef} searchQuery={searchQuery} onSearchChange={setSearchQuery} searchPlaceholder={t('search.placeholder')} onNavigate={handleSearchNavigate} position={settings.titleBarPosition} />;
-  const TabNavigationComponent = <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} contentFilter={contentFilter} onFilterChange={setContentFilter} emojiMode={emojiMode} onEmojiModeChange={setEmojiMode} />;
+  const TitleBarComponent = <TitleBar ref={searchRef} searchQuery={searchQuery} onSearchChange={setSearchQuery} searchPlaceholder={t('search.placeholder')} onNavigate={handleSearchNavigate} showSearch={activeTab !== 'images'} position={settings.titleBarPosition} />;
+  const TabNavigationComponent = <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} contentFilter={contentFilter} onFilterChange={setContentFilter} imageCategory={imageCategory} onImageCategoryChange={setImageCategory} />;
   const ContentComponent = <div ref={contentDragRef} className="flex-1 overflow-hidden relative">
       {activeTab === 'clipboard' && <ClipboardTab ref={clipboardTabRef} contentFilter={contentFilter} searchQuery={searchQuery} />}
       {activeTab === 'favorites' && <FavoritesTab ref={favoritesTabRef} contentFilter={contentFilter} searchQuery={searchQuery} />}
-      {activeTab === 'emoji' && <Suspense fallback={null}><EmojiTab emojiMode={emojiMode} onEmojiModeChange={setEmojiMode} /></Suspense>}
+      {activeTab === 'images' && <Suspense fallback={null}><ImagesTab imageCategory={imageCategory} /></Suspense>}
     </div>;
   const FooterComponent = <FooterBar>
       <GroupsPopup ref={groupsPopupRef} activeTab={activeTab} onTabChange={setActiveTab} onGroupChange={handleGroupChange} />

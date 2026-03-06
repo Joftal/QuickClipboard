@@ -1,8 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import '@shared/styles/uno';
 import '@unocss/reset/tailwind.css';
 import '@shared/styles/index.css';
-import 'uno.css';
 import '@shared/i18n';
 import { initStores } from '@shared/store';
 import { initClipboardItems } from '@shared/store/clipboardStore';

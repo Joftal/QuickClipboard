@@ -1,6 +1,7 @@
 import { proxy } from 'valtio'
 import { TOOL_REGISTRY, DEFAULT_LAYOUT, LAYOUT_STORAGE_KEY } from '@shared/config/tools'
-import { executeToolAction } from '@shared/services/toolActions'
+import { executeToolAction, getToolState, initializeToolStates, setToolState } from '@shared/services/toolActions'
+import { settingsStore } from '@shared/store/settingsStore'
 
 // 工具状态存储
 export const toolsStore = proxy({
@@ -57,8 +58,6 @@ export const toolsStore = proxy({
   // 初始化工具状态
   async initStates() {
     // 先从配置文件同步到 localStorage 缓存
-    const { settingsStore } = await import('@shared/store/settingsStore')
-    const { initializeToolStates, getToolState } = await import('@shared/services/toolActions')
     await initializeToolStates(settingsStore)
     
     // 从 localStorage 读取所有工具状态
@@ -83,10 +82,7 @@ export const toolsStore = proxy({
     if (this.states.hasOwnProperty(toolId)) {
       const newState = !this.states[toolId]
       this.states[toolId] = newState
-
-      import('@shared/services/toolActions').then(({ setToolState }) => {
-        setToolState(toolId, newState)
-      })
+      setToolState(toolId, newState)
     }
   },
   
@@ -94,11 +90,9 @@ export const toolsStore = proxy({
   setToolState(toolId, state) {
     if (this.states.hasOwnProperty(toolId)) {
       this.states[toolId] = state
-      
+
       // 使用统一的状态管理
-      import('@shared/services/toolActions').then(({ setToolState }) => {
-        setToolState(toolId, state)
-      })
+      setToolState(toolId, state)
     }
   },
   

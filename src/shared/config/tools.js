@@ -1,4 +1,4 @@
-import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+﻿import '@shared/styles/tabler-icons-woff2.css';
 
 
 // 工具注册表配置
@@ -50,4 +50,5 @@ export const MAX_TITLEBAR_TOOLS = 3
 
 // 本地存储键
 export const LAYOUT_STORAGE_KEY = 'tool-layout-v2'
+
 

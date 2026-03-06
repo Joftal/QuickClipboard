@@ -1,4 +1,4 @@
-import '@tabler/icons-webfont/dist/tabler-icons.min.css';
+﻿import '@shared/styles/tabler-icons-woff2.css';
 import { useTranslation } from 'react-i18next';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { useSnapshot } from 'valtio';
@@ -11,8 +11,8 @@ function TabNavigation({
   onTabChange,
   contentFilter,
   onFilterChange,
-  emojiMode,
-  onEmojiModeChange
+  imageCategory,
+  onImageCategoryChange
 }) {
   const {
     t
@@ -21,7 +21,7 @@ function TabNavigation({
   const uiAnimationEnabled = settings.uiAnimationEnabled !== false;
   const tabsRef = useRef({});
   const filtersRef = useRef({});
-  const emojiModesRef = useRef({});
+  const imageModesRef = useRef({});
   const [tabIndicator, setTabIndicator] = useState({
     width: 0,
     left: 0
@@ -30,13 +30,13 @@ function TabNavigation({
     width: 0,
     left: 0
   });
-  const [emojiModeIndicator, setEmojiModeIndicator] = useState({
+  const [imageModeIndicator, setImageModeIndicator] = useState({
     width: 0,
     left: 0
   });
   const [tabAnimationKey, setTabAnimationKey] = useState(0);
   const [filterAnimationKey, setFilterAnimationKey] = useState(0);
-  const [emojiModeAnimationKey, setEmojiModeAnimationKey] = useState(0);
+  const [imageModeAnimationKey, setImageModeAnimationKey] = useState(0);
 
   const tabs = [{
     id: 'clipboard',
@@ -47,24 +47,19 @@ function TabNavigation({
     label: t('favorites.title') || '收藏',
     icon: 'ti ti-star'
   }, {
-    id: 'emoji',
-    label: t('emoji.title') || '符号',
-    icon: 'ti ti-mood-smile'
-  }];
-
-  const emojiModes = [{
-    id: 'emoji',
-    label: t('emoji.emoji') || 'Emoji',
-    icon: 'ti ti-mood-smile',
-    emoji: '😀'
-  }, {
-    id: 'symbols',
-    label: t('emoji.symbols') || '符号',
-    icon: 'ti ti-math-symbols'
-  }, {
     id: 'images',
     label: t('emoji.images') || '图片',
     icon: 'ti ti-photo-star'
+  }];
+
+  const imageModes = [{
+    id: 'images',
+    label: t('emoji.images') || '图片',
+    icon: 'ti ti-photo'
+  }, {
+    id: 'gifs',
+    label: t('emoji.gifs') || 'GIF',
+    icon: 'ti ti-gif'
   }];
 
   const filters = [{
@@ -109,15 +104,15 @@ function TabNavigation({
     }
   }, [contentFilter]);
 
-  const updateEmojiModeIndicator = useCallback(() => {
-    const activeElement = emojiModesRef.current[emojiMode];
+  const updateImageModeIndicator = useCallback(() => {
+    const activeElement = imageModesRef.current[imageCategory];
     if (activeElement) {
-      setEmojiModeIndicator({
+      setImageModeIndicator({
         width: activeElement.offsetWidth,
         left: activeElement.offsetLeft
       });
     }
-  }, [emojiMode]);
+  }, [imageCategory]);
 
   useEffect(() => {
     updateTabIndicator();
@@ -134,28 +129,28 @@ function TabNavigation({
   }, [updateFilterIndicator]);
 
   useEffect(() => {
-    updateEmojiModeIndicator();
+    updateImageModeIndicator();
     setTimeout(() => {
-      setEmojiModeAnimationKey(prev => prev + 1);
+      setImageModeAnimationKey(prev => prev + 1);
     }, 300);
-  }, [updateEmojiModeIndicator]);
+  }, [updateImageModeIndicator]);
 
   // 监听窗口大小变化
   useEffect(() => {
     const handleResize = () => {
       updateTabIndicator();
       updateFilterIndicator();
-      updateEmojiModeIndicator();
+      updateImageModeIndicator();
     };
     window.addEventListener('resize', handleResize);
     handleResize();
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [updateTabIndicator, updateFilterIndicator, updateEmojiModeIndicator]);
+  }, [updateTabIndicator, updateFilterIndicator, updateImageModeIndicator]);
 
-  const handleEmojiModeChange = (id) => {
-    onEmojiModeChange(id);
+  const handleImageModeChange = (id) => {
+    onImageCategoryChange(id);
   };
 
   return <div className="tab-navigation flex-shrink-0 bg-gray-100 dark:bg-gray-900 border-b border-gray-300/80 dark:border-gray-700/30 shadow-sm transition-colors duration-500 tab-bar">
@@ -180,27 +175,27 @@ function TabNavigation({
       {/* 分隔线 */}
       <div className="w-px bg-gray-400/60 dark:bg-gray-600/60 my-1.5" />
 
-      {/* 右侧：内容筛选，Emoji/符号切换 - 50% */}
+      {/* 右侧：内容筛选 / 图片分类切换 - 50% */}
       <div className="flex-1 flex items-center px-1 relative">
-        <div className={`flex items-center justify-center gap-1 relative ${activeTab === 'emoji' ? 'w-full' : 'mx-auto'}`}>
+        <div className={`flex items-center justify-center gap-1 relative ${activeTab === 'images' ? 'w-full' : 'mx-auto'}`}>
           {/* 滑动指示器 */}
           <div className={`absolute rounded-lg pointer-events-none ${uiAnimationEnabled ? 'transition-all duration-300 ease-out' : ''}`} style={{
-            width: `${activeTab === 'emoji' ? emojiModeIndicator.width : filterIndicator.width}px`,
+            width: `${activeTab === 'images' ? imageModeIndicator.width : filterIndicator.width}px`,
             height: '28px',
-            left: `${activeTab === 'emoji' ? emojiModeIndicator.left : filterIndicator.left}px`,
+            left: `${activeTab === 'images' ? imageModeIndicator.left : filterIndicator.left}px`,
             top: '50%',
             transform: 'translateY(-50%)'
           }}>
-            <div key={activeTab === 'emoji' ? `emoji-mode-bounce-${emojiModeAnimationKey}` : `filter-bounce-${filterAnimationKey}`} className={`w-full h-full rounded-lg bg-blue-500 ${uiAnimationEnabled ? 'animate-button-bounce' : ''}`} />
+            <div key={activeTab === 'images' ? `image-mode-bounce-${imageModeAnimationKey}` : `filter-bounce-${filterAnimationKey}`} className={`w-full h-full rounded-lg bg-blue-500 ${uiAnimationEnabled ? 'animate-button-bounce' : ''}`} />
           </div>
-          {activeTab === 'emoji'
-            ? emojiModes.map(mode => (
-                <div key={mode.id} ref={el => emojiModesRef.current[mode.id] = el} className="relative flex-1 h-7">
+          {activeTab === 'images'
+            ? imageModes.map(mode => (
+                <div key={mode.id} ref={el => imageModesRef.current[mode.id] = el} className="relative flex-1 h-7">
                   <button
-                    onClick={() => handleEmojiModeChange(mode.id)}
+                    onClick={() => handleImageModeChange(mode.id)}
                     title={mode.label}
                     className={`relative z-10 flex items-center justify-center w-full h-full rounded-lg focus:outline-none ${uiAnimationEnabled ? 'hover:scale-105' : ''} ${
-                      emojiMode === mode.id
+                      imageCategory === mode.id
                         ? 'bg-blue-500 text-white shadow-md hover:bg-blue-500'
                         : 'text-gray-600 hover:bg-gray-200 dark:text-gray-300 dark:hover:bg-gray-700'
                     }`}
@@ -209,7 +204,7 @@ function TabNavigation({
                       transitionDuration: '200ms, 200ms, 500ms, 500ms'
                     } : {}}
                   >
-                    {mode.emoji ? <span style={{ fontSize: 16 }}>{mode.emoji}</span> : <i className={mode.icon} style={{ fontSize: 16 }} />}
+                    <i className={mode.icon} style={{ fontSize: 16 }} />
                   </button>
                 </div>
               ))
