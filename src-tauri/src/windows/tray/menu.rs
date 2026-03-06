@@ -179,8 +179,6 @@ pub async fn show_tray_menu(app: AppHandle) -> Result<(), String> {
         menu_item_with_state("toggle-hotkeys", hotkeys_label, Some("ti ti-keyboard"), false),
         menu_item_with_state("toggle-clipboard-monitor", monitor_label, Some("ti ti-clipboard"), false),
         separator_item(),
-        menu_item_with_state("low-memory-mode", "进入低占用模式", Some("ti ti-leaf"), false),
-        separator_item(),
         menu_item("restart", "重启程序", Some("ti ti-refresh")),
         menu_item("quit", "退出", Some("ti ti-power")),
     ];
@@ -243,11 +241,6 @@ fn handle_tray_menu_selection(app: &AppHandle, selected_id: &str) {
         "toggle-clipboard-monitor" => {
             if let Err(e) = crate::commands::settings::toggle_clipboard_monitor(app) {
                 eprintln!("切换剪贴板监听状态失败: {}", e);
-            }
-        }
-        "low-memory-mode" => {
-            if let Err(e) = crate::services::low_memory::enter_low_memory_mode(app) {
-                eprintln!("进入低占用模式失败: {}", e);
             }
         }
         "restart" => {

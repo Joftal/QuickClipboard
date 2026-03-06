@@ -17,39 +17,26 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
 
     let app_handle = app.clone();
     let app_handle_for_enter = app.clone();
-    let app_handle_for_menu = app.clone();
     let click_handler = create_click_handler(app_handle.clone());
     
     let _tray = TrayIconBuilder::with_id("main-tray")
         .tooltip("快速剪贴板")
         .icon(icon)
         .show_menu_on_left_click(false)
-        .on_menu_event(move |_app, event| {
-            super::native_menu::set_menu_visible(false);
-            super::handle_native_menu_event(&app_handle_for_menu, &event);
-        })
         .on_tray_icon_event(move |_tray, event| {
             match event {
                 TrayIconEvent::Click { button, button_state, .. } => {
                     match button {
                         MouseButton::Left if button_state == MouseButtonState::Up => {
-                            if crate::services::low_memory::is_low_memory_mode() {
-                                super::native_menu::set_menu_visible(true);
-                            } else {
-                                click_handler();
-                            }
+                            click_handler();
                         }
                         MouseButton::Right if button_state == MouseButtonState::Up => {
-                            if crate::services::low_memory::is_low_memory_mode() {
-                                super::native_menu::set_menu_visible(true);
-                            } else {
-                                let app = app_handle.clone();
-                                tauri::async_runtime::spawn(async move {
-                                    if let Err(e) = super::menu::show_tray_menu(app).await {
-                                        eprintln!("显示托盘菜单失败: {}", e);
-                                    }
-                                });
-                            }
+                            let app = app_handle.clone();
+                            tauri::async_runtime::spawn(async move {
+                                if let Err(e) = super::menu::show_tray_menu(app).await {
+                                    eprintln!("显示托盘菜单失败: {}", e);
+                                }
+                            });
                         }
                         _ => {}
                     }

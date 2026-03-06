@@ -262,10 +262,6 @@ pub fn register_quickpaste_hotkey(shortcut_str: &str) -> Result<(), String> {
     let callback: Arc<dyn Fn(&AppHandle, ShortcutState) + Send + Sync> =
         Arc::new(move |app, state| {
             if state == ShortcutState::Pressed {
-                if crate::services::low_memory::is_low_memory_mode() {
-                    return;
-                }
-
                 if is_foreground_globally_disabled() {
                     return;
                 }
@@ -282,10 +278,6 @@ pub fn register_quickpaste_hotkey(shortcut_str: &str) -> Result<(), String> {
                     eprintln!("显示便捷粘贴窗口失败: {}", e);
                 }
             } else if state == ShortcutState::Released {
-                if crate::services::low_memory::is_low_memory_mode() {
-                    return;
-                }
-
                 if is_foreground_globally_disabled() {
                     return;
                 }

@@ -511,9 +511,6 @@ fn handle_mouse_move(x: f64, y: f64) {
     crate::mouse::update_cursor_position(x, y);
 }
 
-static LAST_WHEEL_TIME: Mutex<Option<Instant>> = Mutex::new(None);
-const WHEEL_THROTTLE_MS: u64 = 30;
-
 // 滚轮状态
 static SCROLL_DIRECTION: Mutex<i8> = Mutex::new(0); 
 pub fn get_scroll_direction() -> i8 {
@@ -528,34 +525,9 @@ pub fn reset_scroll_direction() {
 fn handle_wheel_event(delta_y: i64) {
     let dir = if delta_y > 0 { 1 } else if delta_y < 0 { -1 } else { 0 };
     *SCROLL_DIRECTION.lock() = dir;
-
-    use crate::windows::tray::{is_menu_visible, scroll_page};
-
-    if !is_menu_visible() {
-        return;
-    }
-
-    {
-        let mut last_time = LAST_WHEEL_TIME.lock();
-        let now = Instant::now();
-        if let Some(last) = *last_time {
-            if now.duration_since(last) < Duration::from_millis(WHEEL_THROTTLE_MS) {
-                return;
-            }
-        }
-        *last_time = Some(now);
-    }
-
-    let delta = if delta_y < 0 { 1 } else { -1 };
-
-    scroll_page(delta);
 }
 
 fn handle_middle_button_action() {
-    if crate::services::low_memory::is_low_memory_mode() {
-        return;
-    }
-
     if crate::services::system::is_front_app_globally_disabled_from_settings() {
         return;
     }

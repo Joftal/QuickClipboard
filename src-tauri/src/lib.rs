@@ -29,7 +29,6 @@ pub use windows::tray::setup_tray;
 pub use windows::settings_window::open_settings_window;
 pub use windows::quickpaste;
 pub use windows::plugins::context_menu::is_context_menu_visible;
-pub use services::low_memory::{is_low_memory_mode, enter_low_memory_mode, exit_low_memory_mode};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -80,11 +79,6 @@ pub fn run() {
     
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            if services::low_memory::is_low_memory_mode() {
-                if let Err(e) = services::low_memory::exit_low_memory_mode(app) {
-                    eprintln!("退出低占用模式失败: {}", e);
-                }
-            }
             if let Some(window) = app.get_webview_window("main") {
                 show_main_window(&window);
             }
@@ -180,9 +174,6 @@ pub fn run() {
                 commands::copy_text_to_clipboard,
                 commands::prompt_disable_win_v_hotkey_if_needed,
                 commands::prompt_enable_win_v_hotkey,
-                commands::enter_low_memory_mode,
-                commands::exit_low_memory_mode,
-                commands::is_low_memory_mode,
                 commands::reload_all_windows,
                 windows::plugins::context_menu::commands::show_context_menu,
                 windows::plugins::context_menu::commands::get_context_menu_options,
@@ -290,15 +281,8 @@ pub fn run() {
 
     app.run(|app, event| {
             match event {
-                tauri::RunEvent::ExitRequested { api, .. } => {
-                    if services::low_memory::is_low_memory_mode() 
-                        && !services::low_memory::is_user_requested_exit() 
-                    {
-                        api.prevent_exit();
-                    }
-                }
                 tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } => {
-                    if label == "main" && !services::low_memory::is_low_memory_mode() {
+                    if label == "main" {
                         app.exit(0);
                     }
                 }
