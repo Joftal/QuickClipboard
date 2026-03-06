@@ -1,9 +1,22 @@
-import { invoke } from '@tauri-apps/api/core'
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { invoke, convertFileSrc } from '@tauri-apps/api/core'
+
+function getNativeFilePath(file) {
+  if (!file || typeof file !== 'object') return null
+
+  const candidates = [file.path, file.filepath]
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) {
+      return candidate
+    }
+  }
+
+  return null
+}
 
 async function uint8ArrayToNumberArrayChunked(data, chunkSize = 256 * 1024) {
   if (!data) return []
   if (Array.isArray(data)) return data
+
   const u8 = data instanceof Uint8Array ? data : new Uint8Array(data)
   const result = new Array(u8.length)
   for (let offset = 0; offset < u8.length; offset += chunkSize) {
@@ -17,42 +30,62 @@ async function uint8ArrayToNumberArrayChunked(data, chunkSize = 256 * 1024) {
 }
 
 // 保存图片
-export async function saveImage(filename, data) {
+export async function saveImage(fileOrName, data) {
+  if (typeof fileOrName === 'object' && fileOrName) {
+    const sourcePath = getNativeFilePath(fileOrName)
+    if (sourcePath) {
+      return await invoke('il_save_image', {
+        payload: {
+          filename: fileOrName.name || 'image',
+          source_path: sourcePath,
+        }
+      })
+    }
+
+    const payloadData = await uint8ArrayToNumberArrayChunked(data)
+    return await invoke('il_save_image', {
+      payload: {
+        filename: fileOrName.name || 'image',
+        data: payloadData,
+      }
+    })
+  }
+
   const payloadData = await uint8ArrayToNumberArrayChunked(data)
-  return await invoke('il_save_image', { 
-    payload: { filename, data: payloadData } 
+  return await invoke('il_save_image', {
+    payload: { filename: fileOrName, data: payloadData }
   })
 }
 
 // 获取图片列表
 export async function getImageList(category, offset = 0, limit = 20) {
-  return await invoke('il_get_image_list', { 
-    payload: { category, offset, limit } 
+  return await invoke('il_get_image_list', {
+    payload: { category, offset, limit }
   })
 }
 
 // 获取图片总数
 export async function getImageCount(category) {
-  return await invoke('il_get_image_count', { 
-    payload: { category } 
+  return await invoke('il_get_image_count', {
+    payload: { category }
   })
 }
 
 // 删除图片
 export async function deleteImage(category, filename) {
-  return await invoke('il_delete_image', { 
-    payload: { category, filename } 
+  return await invoke('il_delete_image', {
+    payload: { category, filename }
   })
 }
 
 // 重命名图片
 export async function renameImage(category, oldFilename, newFilename) {
-  return await invoke('il_rename_image', { 
-    payload: { category, old_filename: oldFilename, new_filename: newFilename } 
+  return await invoke('il_rename_image', {
+    payload: { category, old_filename: oldFilename, new_filename: newFilename }
   })
 }
 
-// 将本地路径转换为URL
+// 将本地路径转换为 URL
 export function getImageUrl(path) {
   return convertFileSrc(path)
 }

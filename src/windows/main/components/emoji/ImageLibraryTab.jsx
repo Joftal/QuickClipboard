@@ -185,9 +185,15 @@ function ImageLibraryTab({ imageCategory, searchQuery }) {
       setUploadProgress(prev => ({ ...prev, current: index + 1 }));
       
       try {
-        const data = await readFileInChunks(file);
-        if (uploadTokenRef.current !== myToken || !isMountedRef.current) return null;
-        const result = await imageLibrary.saveImage(file.name, data);
+        const nativePath = typeof file.path === 'string' && file.path ? file.path : null;
+        let result;
+        if (nativePath) {
+          result = await imageLibrary.saveImage(file);
+        } else {
+          const data = await readFileInChunks(file);
+          if (uploadTokenRef.current !== myToken || !isMountedRef.current) return null;
+          result = await imageLibrary.saveImage(file, data);
+        }
         return result.category === 'gifs' ? 'gif' : 'image';
       } catch (err) {
         console.error('保存图片失败:', err);

@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{fs, path::{Path, PathBuf}};
 use std::time::Duration;
 use serde::{Serialize, Deserialize};
 use crate::services::get_data_directory;
@@ -222,6 +222,22 @@ pub fn save_image(filename: &str, data: &[u8]) -> Result<ImageInfo, String> {
         created_at: timestamp as u64,
         category: category.to_string(),
     })
+}
+
+pub fn save_image_from_path(source_path: &str) -> Result<ImageInfo, String> {
+    let path = Path::new(source_path);
+    if !path.exists() {
+        return Err(format!("源文件不存在: {}", source_path));
+    }
+
+    let filename = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| format!("源文件名无效: {}", source_path))?
+        .to_string();
+
+    let data = fs::read(path).map_err(|error| format!("读取源文件失败: {}", error))?;
+    save_image(&filename, &data)
 }
 
 // 获取图片列表

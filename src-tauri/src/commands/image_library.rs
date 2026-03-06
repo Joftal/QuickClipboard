@@ -4,7 +4,10 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 pub struct SaveImagePayload {
     filename: String,
-    data: Vec<u8>,
+    #[serde(default)]
+    data: Option<Vec<u8>>,
+    #[serde(default)]
+    source_path: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -41,8 +44,17 @@ pub fn il_init() -> Result<(), String> {
 pub async fn il_save_image(payload: SaveImagePayload) -> Result<image_library::ImageInfo, String> {
     let filename = payload.filename;
     let data = payload.data;
+    let source_path = payload.source_path;
 
-    let handle = tokio::task::spawn_blocking(move || image_library::save_image(&filename, &data));
+    let handle = tokio::task::spawn_blocking(move || {
+        if let Some(path) = source_path.as_deref() {
+            return image_library::save_image_from_path(path);
+        }
+
+        let data = data.ok_or_else(|| "缺少图片数据或源文件路径".to_string())?;
+        image_library::save_image(&filename, &data)
+    });
+
     handle
         .await
         .map_err(|error| format!("图片保存任务执行失败: {}", error))?
