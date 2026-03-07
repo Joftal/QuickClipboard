@@ -64,15 +64,20 @@ pub fn run() {
             }
         }
 
-        if let Ok(settings) = services::settings::load_settings_from_file() {
-            if settings.run_as_admin {
-                let is_admin = services::system::is_running_as_admin();
-                
-                if is_admin {
-                    let _ = services::system::create_scheduled_task();
-                } else if services::system::elevate::try_elevate_and_restart() {
-                    std::process::exit(0);
+        match services::settings::load_settings_from_file() {
+            Ok(settings) => {
+                if settings.run_as_admin {
+                    let is_admin = services::system::is_running_as_admin();
+                    
+                    if is_admin {
+                        let _ = services::system::create_scheduled_task();
+                    } else if services::system::elevate::try_elevate_and_restart() {
+                        std::process::exit(0);
+                    }
                 }
+            }
+            Err(error) => {
+                eprintln!("启动前读取设置失败: {}", error);
             }
         }
     }

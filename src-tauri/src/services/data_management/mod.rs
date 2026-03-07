@@ -127,6 +127,7 @@ fn remove_file_if_exists(path: &Path, label: &str) -> Result<(), String> {
 
 fn clean_storage_artifacts(dir: &Path) -> Result<(), String> {
     remove_dir_if_exists(&dir.join("clipboard_images"), "图片目录")?;
+    remove_dir_if_exists(&dir.join("pin_images"), "贴图目录")?;
     remove_dir_if_exists(&dir.join("image_library"), "图库目录")?;
     remove_dir_if_exists(&dir.join("app_icons"), "图标目录")?;
 
@@ -598,15 +599,12 @@ mod tests {
     use super::*;
     use crate::services::database::connection::close_database;
     use crate::services::database::init_database;
-    use once_cell::sync::Lazy;
+    use crate::services::test_support::lock_global_test_state;
     use rusqlite::params;
-    use std::sync::Mutex;
     use uuid::Uuid;
 
-    static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
-
     fn with_merge_test_databases(test: impl FnOnce(PathBuf, PathBuf)) {
-        let _guard = TEST_MUTEX.lock().expect("test mutex poisoned");
+        let _guard = lock_global_test_state();
         let base_dir = std::env::temp_dir().join(format!(
             "quickclipboard-merge-test-{}",
             Uuid::new_v4()
@@ -628,7 +626,7 @@ mod tests {
     }
 
     fn with_temp_dir(prefix: &str, test: impl FnOnce(PathBuf)) {
-        let _guard = TEST_MUTEX.lock().expect("test mutex poisoned");
+        let _guard = lock_global_test_state();
         let base_dir = std::env::temp_dir().join(format!(
             "{}-{}",
             prefix,
@@ -704,12 +702,15 @@ mod tests {
     fn clean_storage_artifacts_removes_known_files_and_dirs() {
         with_temp_dir("quickclipboard-clean-success", |base_dir| {
             let clipboard_images = base_dir.join("clipboard_images");
+            let pin_images = base_dir.join("pin_images");
             let image_library = base_dir.join("image_library");
             let app_icons = base_dir.join("app_icons");
             fs::create_dir_all(&clipboard_images).expect("create clipboard_images failed");
+            fs::create_dir_all(&pin_images).expect("create pin_images failed");
             fs::create_dir_all(&image_library).expect("create image_library failed");
             fs::create_dir_all(&app_icons).expect("create app_icons failed");
             fs::write(clipboard_images.join("a.txt"), b"x").expect("seed clipboard_images failed");
+            fs::write(pin_images.join("p.txt"), b"x").expect("seed pin_images failed");
             fs::write(image_library.join("b.txt"), b"x").expect("seed image_library failed");
             fs::write(app_icons.join("c.txt"), b"x").expect("seed app_icons failed");
             fs::write(base_dir.join("quickclipboard.db"), b"db").expect("seed db failed");
@@ -719,6 +720,7 @@ mod tests {
             clean_storage_artifacts(&base_dir).expect("cleanup should succeed");
 
             assert!(!clipboard_images.exists());
+            assert!(!pin_images.exists());
             assert!(!image_library.exists());
             assert!(!app_icons.exists());
             assert!(!base_dir.join("quickclipboard.db").exists());

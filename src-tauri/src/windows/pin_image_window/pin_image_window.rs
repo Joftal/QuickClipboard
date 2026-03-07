@@ -32,6 +32,23 @@ fn pin_image_data_map() -> &'static Mutex<HashMap<String, PinImageData>> {
     PIN_IMAGE_DATA_MAP.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+fn resolve_physical_image_bounds(
+    image_physical_x: Option<i32>,
+    image_physical_y: Option<i32>,
+    image_physical_width: Option<u32>,
+    image_physical_height: Option<u32>,
+) -> Option<(i32, i32, u32, u32)> {
+    match (image_physical_x, image_physical_y) {
+        (Some(img_x), Some(img_y)) => Some((
+            img_x,
+            img_y,
+            image_physical_width.unwrap_or(100),
+            image_physical_height.unwrap_or(100),
+        )),
+        _ => None,
+    }
+}
+
 // 从文件路径创建贴图窗口
 #[tauri::command]
 pub async fn pin_image_from_file(
@@ -50,7 +67,12 @@ pub async fn pin_image_from_file(
     edit_data: Option<String>,
 ) -> Result<(), String> {
     let is_preview = preview_mode.unwrap_or(false);
-    let use_physical_coords = image_physical_x.is_some() && image_physical_y.is_some();
+    let physical_bounds = resolve_physical_image_bounds(
+        image_physical_x,
+        image_physical_y,
+        image_physical_width,
+        image_physical_height,
+    );
     
     let (img_width, img_height, pos_x, pos_y) = if is_preview {
         let (orig_w, orig_h) = read_image_logical_size(&file_path, &app)?;
@@ -71,11 +93,7 @@ pub async fn pin_image_from_file(
         let py = if mon_bottom - cursor_y >= window_h { cursor_y } else { cursor_y - window_h };
         
         (img_w, img_h, px.max(mon_x), py.max(mon_y))
-    } else if use_physical_coords {
-        let img_x = image_physical_x.unwrap();
-        let img_y = image_physical_y.unwrap();
-        let img_phys_w = image_physical_width.unwrap_or(100);
-        let img_phys_h = image_physical_height.unwrap_or(100);
+    } else if let Some((img_x, img_y, img_phys_w, img_phys_h)) = physical_bounds {
         
         let scale_factor = crate::utils::screen::ScreenUtils::get_scale_factor_at_point(&app, img_x, img_y);
         let padding = (5.0 * scale_factor).round() as i32;
@@ -373,4 +391,32 @@ pub fn animate_window_resize(
     });
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_physical_image_bounds;
+
+    #[test]
+    fn resolve_physical_image_bounds_requires_complete_position_pair() {
+        assert_eq!(resolve_physical_image_bounds(None, None, None, None), None);
+        assert_eq!(resolve_physical_image_bounds(Some(10), None, None, None), None);
+        assert_eq!(resolve_physical_image_bounds(None, Some(20), None, None), None);
+    }
+
+    #[test]
+    fn resolve_physical_image_bounds_uses_defaults_for_missing_size() {
+        assert_eq!(
+            resolve_physical_image_bounds(Some(10), Some(20), None, None),
+            Some((10, 20, 100, 100))
+        );
+    }
+
+    #[test]
+    fn resolve_physical_image_bounds_preserves_explicit_size() {
+        assert_eq!(
+            resolve_physical_image_bounds(Some(10), Some(20), Some(320), Some(240)),
+            Some((10, 20, 320, 240))
+        );
+    }
 }

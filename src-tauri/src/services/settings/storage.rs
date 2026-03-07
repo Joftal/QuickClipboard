@@ -42,8 +42,10 @@ impl SettingsStorage {
             return Ok(AppSettings::default());
         }
 
-        let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let mut settings: AppSettings = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+        let content = fs::read_to_string(&path)
+            .map_err(|e| format!("读取设置文件失败 [{}]: {}", path.display(), e))?;
+        let mut settings: AppSettings = serde_json::from_str(&content)
+            .map_err(|e| format!("解析设置文件失败 [{}]: {}", path.display(), e))?;
         
         if settings.number_shortcuts_modifier.contains("Alt") {
             settings.number_shortcuts_modifier = "Ctrl".to_string();
@@ -61,7 +63,7 @@ impl SettingsStorage {
     pub fn save(settings: &AppSettings) -> Result<(), String> {
         let path = Self::get_settings_path()?;
         let content = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-        fs::write(&path, content).map_err(|e| e.to_string())
+        fs::write(&path, content).map_err(|e| format!("写入设置文件失败 [{}]: {}", path.display(), e))
     }
 
     pub fn get_data_directory(settings: &AppSettings) -> Result<PathBuf, String> {

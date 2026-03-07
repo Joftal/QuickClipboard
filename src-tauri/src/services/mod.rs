@@ -13,6 +13,18 @@ pub use system::hotkey;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
+pub(crate) mod test_support {
+    use once_cell::sync::Lazy;
+    use parking_lot::{Mutex, MutexGuard};
+
+    static GLOBAL_TEST_STATE_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+    pub(crate) fn lock_global_test_state() -> MutexGuard<'static, ()> {
+        GLOBAL_TEST_STATE_LOCK.lock()
+    }
+}
+
 pub fn normalize_path_for_hash(path: &str) -> String {
     let normalized = path.replace("\\", "/");
     for prefix in ["clipboard_images/", "pin_images/"] {

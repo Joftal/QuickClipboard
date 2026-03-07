@@ -72,8 +72,6 @@ fn create_tables(conn: &Connection) -> Result<(), String> {
         ).map_err(|e| format!("添加粘贴次数字段失败: {}", e))?;
     }
     
-    migrate_clipboard_order(conn)?;
-
     conn.execute(
         "CREATE TABLE IF NOT EXISTS favorites (
             id TEXT PRIMARY KEY,
@@ -119,6 +117,8 @@ fn create_tables(conn: &Connection) -> Result<(), String> {
             [],
         ).map_err(|e| format!("添加收藏粘贴次数字段失败: {}", e))?;
     }
+
+    migrate_clipboard_order(conn)?;
 
     let source_app_exists = has_column(conn, "clipboard", "source_app")?;
     
@@ -186,7 +186,7 @@ fn has_column(conn: &Connection, table: &str, column: &str) -> Result<bool, Stri
 pub fn migrate_clipboard_order(conn: &Connection) -> Result<(), String> {
     let need_migrate: bool = conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM clipboard WHERE item_order < 0) 
-         OR (SELECT MAX(item_order) FROM clipboard) < (SELECT COUNT(*) FROM clipboard)",
+         OR COALESCE((SELECT MAX(item_order) FROM clipboard), 0) < (SELECT COUNT(*) FROM clipboard)",
         [], |row| row.get(0)
     ).map_err(|e| format!("检查剪贴板排序迁移状态失败: {}", e))?;
     
@@ -216,7 +216,7 @@ pub fn migrate_clipboard_order(conn: &Connection) -> Result<(), String> {
 
     for group in groups {
         let need: bool = conn.query_row(
-            "SELECT (SELECT MAX(item_order) FROM favorites WHERE group_name = ?1) 
+            "SELECT COALESCE((SELECT MAX(item_order) FROM favorites WHERE group_name = ?1), 0) 
                   < (SELECT COUNT(*) FROM favorites WHERE group_name = ?1)",
             [&group], |row| row.get(0)
         ).map_err(|e| format!("检查收藏分组排序迁移状态失败: {}", e))?;
@@ -288,6 +288,13 @@ fn migrate_favorites_auto_titles(conn: &Connection) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn create_tables_succeeds_on_empty_database() {
+        let conn = Connection::open_in_memory().expect("open in-memory db failed");
+        let result = create_tables(&conn);
+        assert!(result.is_ok(), "unexpected error: {:?}", result.err());
+    }
 
     #[test]
     fn list_table_columns_returns_error_for_invalid_table_identifier() {

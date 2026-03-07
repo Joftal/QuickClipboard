@@ -302,13 +302,10 @@ mod tests {
         toggle_pin_clipboard_item,
     };
     use crate::services::settings::{get_settings, replace_settings, AppSettings};
-    use once_cell::sync::Lazy;
+    use crate::services::test_support::lock_global_test_state;
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::Mutex;
     use uuid::Uuid;
-
-    static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
     fn rich_text_content(
         content: &str,
@@ -327,7 +324,7 @@ mod tests {
     }
 
     fn with_test_database(test: impl FnOnce(PathBuf)) {
-        let _guard = TEST_MUTEX.lock().expect("test mutex poisoned");
+        let _guard = lock_global_test_state();
         let original_settings = get_settings();
         let data_dir = std::env::temp_dir().join(format!(
             "quickclipboard-storage-test-{}",
