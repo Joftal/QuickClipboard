@@ -223,30 +223,168 @@ fn merge_dir_no_overwrite(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn get_attached_table_columns(
+    conn: &rusqlite::Connection,
+    schema: &str,
+    table: &str,
+) -> Result<std::collections::HashSet<String>, String> {
+    let pragma_sql = format!("PRAGMA {}.table_info({})", schema, table);
+    let mut stmt = conn.prepare(&pragma_sql)
+        .map_err(|e| format!("读取 {}.{} 表结构失败: {}", schema, table, e))?;
+
+    let columns = stmt.query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| format!("读取 {}.{} 字段列表失败: {}", schema, table, e))?
+        .collect::<Result<std::collections::HashSet<_>, _>>()
+        .map_err(|e| format!("解析 {}.{} 字段列表失败: {}", schema, table, e))?;
+
+    Ok(columns)
+}
+
+fn ensure_required_columns(
+    columns: &std::collections::HashSet<String>,
+    table: &str,
+    required: &[&str],
+) -> Result<(), String> {
+    let missing: Vec<&str> = required
+        .iter()
+        .copied()
+        .filter(|column| !columns.contains(*column))
+        .collect();
+
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "导入数据库中的 {} 表缺少必需字段: {}",
+            table,
+            missing.join(", ")
+        ))
+    }
+}
+
+fn import_column_expr(
+    columns: &std::collections::HashSet<String>,
+    column: &str,
+    default_expr: &str,
+) -> String {
+    if columns.contains(column) {
+        format!("src.{}", column)
+    } else {
+        format!("{} AS {}", default_expr, column)
+    }
+}
+
 fn merge_database(src_db: &Path) -> Result<(), String> {
     with_connection(|conn| {
         let import_path = src_db.to_str().ok_or(rusqlite::Error::InvalidPath("bad path".into()))?;
         conn.execute("ATTACH DATABASE ?1 AS importdb", [import_path])?;
-        let _ = conn.execute(
-            "INSERT OR IGNORE INTO groups (name, icon, color, order_index, created_at, updated_at)
-             SELECT name, icon, color, order_index, created_at, updated_at FROM importdb.groups",
-            [],
-        );
 
-        let _ = conn.execute(
-            "INSERT OR IGNORE INTO favorites (id, title, content, html_content, content_type, image_id, group_name, item_order, created_at, updated_at)
-             SELECT id, title, content, html_content, content_type, image_id, group_name, item_order, created_at, updated_at FROM importdb.favorites",
-            [],
-        );
-        let _ = conn.execute(
-            "INSERT INTO clipboard (content, html_content, content_type, image_id, created_at, updated_at)
-             SELECT content, html_content, content_type, image_id, created_at, updated_at FROM importdb.clipboard",
-            [],
-        );
+        let merge_result = (|| -> Result<(), String> {
+            let group_columns = get_attached_table_columns(conn, "importdb", "groups")?;
+            ensure_required_columns(
+                &group_columns,
+                "groups",
+                &["name", "icon", "order_index", "created_at", "updated_at"],
+            )?;
 
-        let _ = conn.execute("DETACH DATABASE importdb", []);
-        reorder_clipboard_by_time(conn);
-        
+            let favorite_columns = get_attached_table_columns(conn, "importdb", "favorites")?;
+            ensure_required_columns(
+                &favorite_columns,
+                "favorites",
+                &[
+                    "id",
+                    "title",
+                    "content",
+                    "html_content",
+                    "content_type",
+                    "image_id",
+                    "group_name",
+                    "created_at",
+                    "updated_at",
+                ],
+            )?;
+
+            let clipboard_columns = get_attached_table_columns(conn, "importdb", "clipboard")?;
+            ensure_required_columns(
+                &clipboard_columns,
+                "clipboard",
+                &["content", "html_content", "content_type", "image_id", "created_at", "updated_at"],
+            )?;
+
+            let groups_sql = format!(
+                "INSERT OR IGNORE INTO groups (name, icon, color, order_index, created_at, updated_at)
+                 SELECT src.name, src.icon, {}, src.order_index, src.created_at, src.updated_at
+                 FROM importdb.groups AS src",
+                import_column_expr(&group_columns, "color", "'#dc2626'"),
+            );
+            conn.execute(&groups_sql, [])
+                .map_err(|e| format!("合并分组数据失败: {}", e))?;
+
+            let favorites_sql = format!(
+                "INSERT OR IGNORE INTO favorites (
+                    id, title, content, html_content, content_type, image_id,
+                    group_name, item_order, paste_count, char_count, created_at, updated_at
+                 )
+                 SELECT
+                    src.id,
+                    src.title,
+                    src.content,
+                    src.html_content,
+                    src.content_type,
+                    src.image_id,
+                    src.group_name,
+                    {},
+                    {},
+                    {},
+                    src.created_at,
+                    src.updated_at
+                 FROM importdb.favorites AS src",
+                import_column_expr(&favorite_columns, "item_order", "0"),
+                import_column_expr(&favorite_columns, "paste_count", "0"),
+                import_column_expr(&favorite_columns, "char_count", "NULL"),
+            );
+            conn.execute(&favorites_sql, [])
+                .map_err(|e| format!("合并收藏数据失败: {}", e))?;
+
+            let clipboard_sql = format!(
+                "INSERT INTO clipboard (
+                    content, html_content, content_type, image_id,
+                    item_order, is_pinned, paste_count, source_app, source_icon_hash, char_count,
+                    created_at, updated_at
+                 )
+                 SELECT
+                    src.content,
+                    src.html_content,
+                    src.content_type,
+                    src.image_id,
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    {},
+                    src.created_at,
+                    src.updated_at
+                 FROM importdb.clipboard AS src",
+                import_column_expr(&clipboard_columns, "item_order", "0"),
+                import_column_expr(&clipboard_columns, "is_pinned", "0"),
+                import_column_expr(&clipboard_columns, "paste_count", "0"),
+                import_column_expr(&clipboard_columns, "source_app", "NULL"),
+                import_column_expr(&clipboard_columns, "source_icon_hash", "NULL"),
+                import_column_expr(&clipboard_columns, "char_count", "NULL"),
+            );
+            conn.execute(&clipboard_sql, [])
+                .map_err(|e| format!("合并剪贴板数据失败: {}", e))?;
+
+            reorder_clipboard_by_time(conn);
+            Ok(())
+        })();
+
+        let detach_result = conn.execute("DETACH DATABASE importdb", []);
+
+        merge_result.map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(e))))?;
+        detach_result.map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::other(format!("分离导入数据库失败: {}", e)))))?;
+
         Ok(())
     })?;
     Ok(())
@@ -410,6 +548,233 @@ fn change_storage_dir_internal(src_dir: &Path, dst_dir: &Path, mode: &str) -> Re
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::database::connection::close_database;
+    use crate::services::database::init_database;
+    use once_cell::sync::Lazy;
+    use rusqlite::params;
+    use std::sync::Mutex;
+    use uuid::Uuid;
+
+    static TEST_MUTEX: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+    fn with_merge_test_databases(test: impl FnOnce(PathBuf, PathBuf)) {
+        let _guard = TEST_MUTEX.lock().expect("test mutex poisoned");
+        let base_dir = std::env::temp_dir().join(format!(
+            "quickclipboard-merge-test-{}",
+            Uuid::new_v4()
+        ));
+        let source_db = base_dir.join("source.db");
+        let target_db = base_dir.join("target.db");
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            fs::create_dir_all(&base_dir).expect("create test dir failed");
+            test(source_db.clone(), target_db.clone());
+        }));
+
+        close_database();
+        let _ = fs::remove_dir_all(&base_dir);
+
+        if let Err(panic) = result {
+            std::panic::resume_unwind(panic);
+        }
+    }
+
+    #[test]
+    fn merge_database_preserves_metadata_from_source_db() {
+        with_merge_test_databases(|source_db, target_db| {
+            init_database(source_db.to_string_lossy().as_ref()).expect("init source db failed");
+            with_connection(|conn| {
+                conn.execute(
+                    "INSERT INTO groups (name, icon, color, order_index, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params!["工作", "ti ti-briefcase", "#00ff88", 1_i64, 100_i64, 200_i64],
+                )?;
+                conn.execute(
+                    "INSERT INTO favorites (
+                        id, title, content, html_content, content_type, image_id,
+                        group_name, item_order, paste_count, char_count, created_at, updated_at
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                    params![
+                        "fav-1",
+                        "标题",
+                        "收藏内容",
+                        "<p>收藏内容</p>",
+                        "rich_text",
+                        "img-fav",
+                        "工作",
+                        9_i64,
+                        7_i64,
+                        123_i64,
+                        300_i64,
+                        400_i64,
+                    ],
+                )?;
+                conn.execute(
+                    "INSERT INTO clipboard (
+                        content, html_content, content_type, image_id,
+                        item_order, is_pinned, paste_count, source_app, source_icon_hash, char_count,
+                        created_at, updated_at
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                    params![
+                        "剪贴板内容",
+                        "<p>剪贴板内容</p>",
+                        "rich_text",
+                        "img-clip",
+                        12_i64,
+                        1_i64,
+                        5_i64,
+                        "Code.exe",
+                        "icon-code",
+                        456_i64,
+                        500_i64,
+                        600_i64,
+                    ],
+                )?;
+                Ok(())
+            }).expect("seed source data failed");
+            close_database();
+
+            init_database(target_db.to_string_lossy().as_ref()).expect("init target db failed");
+            merge_database(&source_db).expect("merge database failed");
+
+            with_connection(|conn| {
+                let group_color: String = conn.query_row(
+                    "SELECT color FROM groups WHERE name = ?1",
+                    params!["工作"],
+                    |row| row.get(0),
+                )?;
+                assert_eq!(group_color, "#00ff88");
+
+                let favorite: (i64, Option<i64>) = conn.query_row(
+                    "SELECT paste_count, char_count FROM favorites WHERE id = ?1",
+                    params!["fav-1"],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )?;
+                assert_eq!(favorite.0, 7);
+                assert_eq!(favorite.1, Some(123));
+
+                let clipboard: (i64, i64, Option<String>, Option<String>, Option<i64>) = conn.query_row(
+                    "SELECT is_pinned, paste_count, source_app, source_icon_hash, char_count
+                     FROM clipboard WHERE content = ?1",
+                    params!["剪贴板内容"],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+                )?;
+                assert_eq!(clipboard.0, 1);
+                assert_eq!(clipboard.1, 5);
+                assert_eq!(clipboard.2.as_deref(), Some("Code.exe"));
+                assert_eq!(clipboard.3.as_deref(), Some("icon-code"));
+                assert_eq!(clipboard.4, Some(456));
+
+                Ok(())
+            }).expect("verify merged metadata failed");
+        });
+    }
+
+    #[test]
+    fn merge_database_supports_legacy_source_schema() {
+        with_merge_test_databases(|source_db, target_db| {
+            let source_conn = rusqlite::Connection::open(&source_db).expect("open legacy source db failed");
+            source_conn.execute_batch(
+                "CREATE TABLE groups (
+                    name TEXT PRIMARY KEY,
+                    icon TEXT NOT NULL DEFAULT 'ti ti-folder',
+                    order_index INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE favorites (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    html_content TEXT,
+                    content_type TEXT NOT NULL DEFAULT 'text',
+                    image_id TEXT,
+                    group_name TEXT NOT NULL DEFAULT '全部',
+                    item_order INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE clipboard (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content TEXT NOT NULL,
+                    html_content TEXT,
+                    content_type TEXT NOT NULL DEFAULT 'text',
+                    image_id TEXT,
+                    item_order INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );"
+            ).expect("create legacy schema failed");
+            source_conn.execute(
+                "INSERT INTO groups (name, icon, order_index, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params!["旧分组", "ti ti-folder", 1_i64, 10_i64, 20_i64],
+            ).expect("insert legacy group failed");
+            source_conn.execute(
+                "INSERT INTO favorites (
+                    id, title, content, html_content, content_type, image_id,
+                    group_name, item_order, created_at, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    "legacy-fav",
+                    "旧收藏",
+                    "旧内容",
+                    "<p>旧内容</p>",
+                    "rich_text",
+                    "legacy-img",
+                    "旧分组",
+                    2_i64,
+                    30_i64,
+                    40_i64,
+                ],
+            ).expect("insert legacy favorite failed");
+            source_conn.execute(
+                "INSERT INTO clipboard (content, html_content, content_type, image_id, item_order, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params!["旧剪贴板", "<p>旧剪贴板</p>", "rich_text", "legacy-clip-img", 3_i64, 50_i64, 60_i64],
+            ).expect("insert legacy clipboard failed");
+            drop(source_conn);
+
+            init_database(target_db.to_string_lossy().as_ref()).expect("init target db failed");
+            merge_database(&source_db).expect("merge legacy database failed");
+
+            with_connection(|conn| {
+                let group_color: String = conn.query_row(
+                    "SELECT color FROM groups WHERE name = ?1",
+                    params!["旧分组"],
+                    |row| row.get(0),
+                )?;
+                assert_eq!(group_color, "#dc2626");
+
+                let favorite: (i64, Option<i64>) = conn.query_row(
+                    "SELECT paste_count, char_count FROM favorites WHERE id = ?1",
+                    params!["legacy-fav"],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )?;
+                assert_eq!(favorite.0, 0);
+                assert_eq!(favorite.1, None);
+
+                let clipboard: (i64, i64, Option<String>, Option<String>, Option<i64>) = conn.query_row(
+                    "SELECT is_pinned, paste_count, source_app, source_icon_hash, char_count
+                     FROM clipboard WHERE content = ?1",
+                    params!["旧剪贴板"],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+                )?;
+                assert_eq!(clipboard.0, 0);
+                assert_eq!(clipboard.1, 0);
+                assert_eq!(clipboard.2, None);
+                assert_eq!(clipboard.3, None);
+                assert_eq!(clipboard.4, None);
+
+                Ok(())
+            }).expect("verify legacy merge failed");
+        });
+    }
 }
 
 
