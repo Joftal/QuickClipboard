@@ -268,16 +268,7 @@ fn is_image_id_referenced(conn: &rusqlite::Connection, image_id: &str) -> Result
 
 // 删除图片文件
 fn delete_image_files(image_ids: Vec<String>) -> Result<(), String> {
-    if image_ids.is_empty() { return Ok(()); }
-    let data_dir = crate::services::get_data_directory()?;
-    let images_dir = data_dir.join("clipboard_images");
-    for iid in image_ids {
-        let p = images_dir.join(format!("{}.png", iid));
-        if p.exists() {
-            let _ = std::fs::remove_file(&p);
-        }
-    }
-    Ok(())
+    crate::services::delete_clipboard_image_files(&image_ids)
 }
 
 // 获取收藏总数

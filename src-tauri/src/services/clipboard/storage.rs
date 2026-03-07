@@ -261,21 +261,7 @@ fn collect_deleted_image_ids_after_update(
 }
 
 fn delete_image_files(image_ids: Vec<String>) -> Result<(), String> {
-    if image_ids.is_empty() {
-        return Ok(());
-    }
-
-    let data_dir = crate::services::get_data_directory()?;
-    let images_dir = data_dir.join("clipboard_images");
-
-    for image_id in image_ids {
-        let path = images_dir.join(format!("{}.png", image_id));
-        if path.exists() {
-            let _ = std::fs::remove_file(&path);
-        }
-    }
-
-    Ok(())
+    crate::services::delete_clipboard_image_files(&image_ids)
 }
 
 // 比较文件内容
