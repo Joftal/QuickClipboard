@@ -1,4 +1,5 @@
 use std::{fs, path::{Component, Path, PathBuf}};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use serde::{Serialize, Deserialize};
 use crate::services::get_data_directory;
@@ -6,6 +7,8 @@ use crate::services::get_data_directory;
 const IMAGE_LIBRARY_DIR: &str = "image_library";
 const IMAGES_SUBDIR: &str = "images";
 const GIFS_SUBDIR: &str = "gifs";
+
+static IMAGE_SAVE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageInfo {
@@ -165,6 +168,26 @@ fn ocr_image_text(data: &[u8]) -> Option<String> {
     }
 }
 
+fn build_library_filename(timestamp: u128, sequence: u64, extension: &str, ocr_text: Option<&str>) -> String {
+    match ocr_text {
+        Some(text) if !text.is_empty() => format!("{}_{}_{}.{}", timestamp, sequence, text, extension),
+        _ => format!("{}_{}.{}", timestamp, sequence, extension),
+    }
+}
+
+fn allocate_library_filename(target_dir: &Path, timestamp: u128, extension: &str, ocr_text: Option<&str>) -> Result<(String, PathBuf), String> {
+    for _ in 0..1024 {
+        let sequence = IMAGE_SAVE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let filename = build_library_filename(timestamp, sequence, extension, ocr_text);
+        let file_path = target_dir.join(&filename);
+        if !file_path.exists() {
+            return Ok((filename, file_path));
+        }
+    }
+
+    Err("生成唯一图片文件名失败，请稍后重试".to_string())
+}
+
 // 保存图片到图片库
 pub fn save_image(filename: &str, data: &[u8]) -> Result<ImageInfo, String> {
     init_image_library()?;
@@ -204,12 +227,7 @@ pub fn save_image(filename: &str, data: &[u8]) -> Result<ImageInfo, String> {
     };
     
     let target_dir = if category == "gifs" { get_gifs_dir()? } else { get_images_dir()? };
-    
-    let new_filename = match ocr_text {
-        Some(text) => format!("{}_{}.{}", timestamp, text, extension),
-        None => format!("{}.{}", timestamp, extension),
-    };
-    let file_path = target_dir.join(&new_filename);
+    let (new_filename, file_path) = allocate_library_filename(&target_dir, timestamp, extension, ocr_text.as_deref())?;
     
     fs::write(&file_path, &final_data)
         .map_err(|e| format!("保存图片失败: {}", e))?;
@@ -495,6 +513,32 @@ mod tests {
             assert!(result.is_err());
             assert!(source_path.exists());
             assert!(!escaped_path.exists());
+        });
+    }
+
+    #[test]
+    fn build_library_filename_uses_sequence_to_avoid_same_timestamp_collision() {
+        let first = build_library_filename(123456789, 1, "png", Some("Hello"));
+        let second = build_library_filename(123456789, 2, "png", Some("Hello"));
+        assert_ne!(first, second);
+        assert_eq!(first, "123456789_1_Hello.png");
+        assert_eq!(second, "123456789_2_Hello.png");
+    }
+
+    #[test]
+    fn allocate_library_filename_skips_existing_file() {
+        with_test_image_library(|_data_dir| {
+            let images_dir = get_images_dir().expect("get images dir failed");
+            let existing = images_dir.join("999_0_same.png");
+            fs::write(&existing, b"old").expect("write existing file failed");
+
+            IMAGE_SAVE_SEQUENCE.store(0, Ordering::Relaxed);
+            let (filename, file_path) = allocate_library_filename(&images_dir, 999, "png", Some("same"))
+                .expect("allocate unique filename failed");
+
+            assert_eq!(filename, "999_1_same.png");
+            assert_eq!(file_path, images_dir.join("999_1_same.png"));
+            assert!(existing.exists());
         });
     }
 }

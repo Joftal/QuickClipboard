@@ -1,8 +1,6 @@
 import {
   reloadSettings,
   saveSettings as saveSettingsApi,
-  setEdgeHideEnabled as setEdgeHideEnabledApi,
-  getAllWindowsInfo,
   getAppVersion as getAppVersionApi,
   isPortableMode as isPortableModeApi
 } from '@shared/api'
@@ -130,12 +128,6 @@ export async function saveSettingsToBackend(settings, options = {}) {
   }
 }
 
-// 保存单个设置项
-export async function saveSingleSetting(key, value, allSettings) {
-  const updatedSettings = { ...allSettings, [key]: value }
-  return await saveSettingsToBackend(updatedSettings)
-}
-
 // 获取应用版本
 export async function getAppVersion() {
   try {
@@ -155,27 +147,6 @@ export async function isPortableMode() {
   } catch (error) {
     console.error('检查便携版模式失败:', error)
     return false
-  }
-}
-
-// 设置贴边隐藏
-export async function setEdgeHideEnabled(enabled) {
-  try {
-    await setEdgeHideEnabledApi(enabled)
-    return { success: true }
-  } catch (error) {
-    console.error('更新贴边隐藏设置失败:', error)
-    return { success: false, error: error.message }
-  }
-}
-
-// 获取所有窗口信息（用于应用过滤）
-export async function getAllWindowsInfoService() {
-  try {
-    return await getAllWindowsInfo()
-  } catch (error) {
-    console.error('获取应用列表失败:', error)
-    return []
   }
 }
 

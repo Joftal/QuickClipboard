@@ -107,7 +107,7 @@ export function useItemCommon(item, options = {}) {
     if (primaryType === 'rich_text') {
       // 根据格式设置决定显示 HTML 还是纯文本
       if (settings.pasteWithFormat && item.html_content) {
-        return <HtmlContent htmlContent={item.html_content} lineClampClass={lineClampClass} searchKeyword={searchKeyword} compact={compact} rowHeight={rowHeight} />;
+        return <HtmlContent htmlContent={item.html_content} searchKeyword={searchKeyword} />;
       } else {
         return <TextContent content={item.content || ''} lineClampClass={lineClampClass} searchKeyword={searchKeyword} compact={compact} rowHeight={rowHeight} />;
       }

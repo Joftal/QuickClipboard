@@ -6,6 +6,14 @@ import {
   saveSettingsToBackend 
 } from '@shared/services/settingsService'
 
+let settingsSaveQueue = Promise.resolve()
+
+function enqueueSettingsSave(task) {
+  const run = settingsSaveQueue.catch(() => {}).then(task)
+  settingsSaveQueue = run.catch(() => {})
+  return run
+}
+
 // 设置 Store
 export const settingsStore = proxy({
   ...defaultSettings,
@@ -35,22 +43,25 @@ export const settingsStore = proxy({
   async saveSetting(key, value, options = {}) {
     const previousValue = this[key]
     this[key] = value
-    
-    // 收集当前所有设置
-    const currentSettings = this.getAllSettings()
-    const result = await saveSettingsToBackend(currentSettings, options)
 
-    if (!result.success && Object.is(this[key], value)) {
-      this[key] = previousValue
-    }
-    
-    return result
+    return enqueueSettingsSave(async () => {
+      const currentSettings = this.getAllSettings()
+      const result = await saveSettingsToBackend(currentSettings, options)
+
+      if (!result.success && Object.is(this[key], value)) {
+        this[key] = previousValue
+      }
+
+      return result
+    })
   },
   
   // 保存所有设置
   async saveAllSettings() {
-    const currentSettings = this.getAllSettings()
-    return await saveSettingsToBackend(currentSettings)
+    return enqueueSettingsSave(async () => {
+      const currentSettings = this.getAllSettings()
+      return await saveSettingsToBackend(currentSettings)
+    })
   },
   
   // 批量更新设置（不保存）

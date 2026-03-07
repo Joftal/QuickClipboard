@@ -111,6 +111,61 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn remove_dir_if_exists(path: &Path, label: &str) -> Result<(), String> {
+    if path.exists() {
+        fs::remove_dir_all(path).map_err(|e| format!("删除{}失败: {}", label, e))?;
+    }
+    Ok(())
+}
+
+fn remove_file_if_exists(path: &Path, label: &str) -> Result<(), String> {
+    if path.exists() {
+        fs::remove_file(path).map_err(|e| format!("删除{}失败: {}", label, e))?;
+    }
+    Ok(())
+}
+
+fn clean_storage_artifacts(dir: &Path) -> Result<(), String> {
+    remove_dir_if_exists(&dir.join("clipboard_images"), "图片目录")?;
+    remove_dir_if_exists(&dir.join("image_library"), "图库目录")?;
+    remove_dir_if_exists(&dir.join("app_icons"), "图标目录")?;
+
+    remove_file_if_exists(&dir.join("quickclipboard.db"), "数据库文件")?;
+    remove_file_if_exists(&dir.join("quickclipboard.db-shm"), "数据库共享内存文件")?;
+    remove_file_if_exists(&dir.join("quickclipboard.db-wal"), "数据库 WAL 文件")?;
+
+    Ok(())
+}
+
+fn normalize_path_for_comparison(path: &Path) -> Result<String, String> {
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("规范化路径失败 [{}]: {}", path.to_string_lossy(), e))?;
+
+    #[cfg(windows)]
+    {
+        let canonical = canonical.to_string_lossy();
+        let normalized = if let Some(path) = canonical.strip_prefix(r"\\?\UNC\") {
+            format!(r"\\{}", path)
+        } else if let Some(path) = canonical.strip_prefix(r"\\?\") {
+            path.to_string()
+        } else {
+            canonical.to_string()
+        };
+
+        Ok(normalized.replace('/', "\\").to_ascii_lowercase())
+    }
+
+    #[cfg(not(windows))]
+    {
+        Ok(canonical.to_string_lossy().to_string())
+    }
+}
+
+fn paths_refer_to_same_location(left: &Path, right: &Path) -> Result<bool, String> {
+    Ok(normalize_path_for_comparison(left)? == normalize_path_for_comparison(right)?)
+}
+
 pub fn reset_all_data() -> Result<String, String> {
     let current_dir = get_current_storage_dir()?;
     let default_dir = get_default_data_dir()?;
@@ -120,22 +175,10 @@ pub fn reset_all_data() -> Result<String, String> {
     });
     close_database();
 
-    fn clean_dir(dir: &Path) -> Result<(), String> {
-        let images = dir.join("clipboard_images");
-        if images.exists() { let _ = fs::remove_dir_all(&images); }
-        let image_library = dir.join("image_library");
-        if image_library.exists() { let _ = fs::remove_dir_all(&image_library); }
-        let app_icons = dir.join("app_icons");
-        if app_icons.exists() { let _ = fs::remove_dir_all(&app_icons); }
-        for name in ["quickclipboard.db", "quickclipboard.db-shm", "quickclipboard.db-wal"] {
-            let p = dir.join(name);
-            if p.exists() { let _ = fs::remove_file(&p); }
-        }
-        Ok(())
+    clean_storage_artifacts(&current_dir)?;
+    if !paths_refer_to_same_location(&current_dir, &default_dir)? {
+        clean_storage_artifacts(&default_dir)?;
     }
-
-    clean_dir(&current_dir)?;
-    if current_dir != default_dir { clean_dir(&default_dir)?; }
 
     let defaults = crate::services::AppSettings {
         use_custom_storage: false,
@@ -172,7 +215,7 @@ pub fn change_storage_dir(new_dir: PathBuf, mode: &str) -> Result<PathBuf, Strin
     if !new_dir.exists() { fs::create_dir_all(&new_dir).map_err(|e| e.to_string())?; }
 
     let current_dir = get_current_storage_dir()?;
-    if new_dir == current_dir {
+    if paths_refer_to_same_location(&new_dir, &current_dir)? {
         return Err("新位置与当前存储位置相同，无需迁移".to_string());
     }
 
@@ -412,7 +455,7 @@ pub fn reset_storage_dir_to_default(mode: &str) -> Result<PathBuf, String> {
     let default_dir = get_default_data_dir()?;
     let current_dir = get_current_storage_dir()?;
 
-    if current_dir == default_dir {
+    if paths_refer_to_same_location(&current_dir, &default_dir)? {
         return Err("当前已在默认存储位置".to_string());
     }
 
@@ -582,6 +625,106 @@ mod tests {
         if let Err(panic) = result {
             std::panic::resume_unwind(panic);
         }
+    }
+
+    fn with_temp_dir(prefix: &str, test: impl FnOnce(PathBuf)) {
+        let _guard = TEST_MUTEX.lock().expect("test mutex poisoned");
+        let base_dir = std::env::temp_dir().join(format!(
+            "{}-{}",
+            prefix,
+            Uuid::new_v4()
+        ));
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            fs::create_dir_all(&base_dir).expect("create test dir failed");
+            test(base_dir.clone());
+        }));
+
+        let _ = fs::remove_dir_all(&base_dir);
+
+        if let Err(panic) = result {
+            std::panic::resume_unwind(panic);
+        }
+    }
+
+    #[test]
+    fn paths_refer_to_same_location_treats_dot_suffix_as_same_dir() {
+        with_temp_dir("quickclipboard-path-compare", |base_dir| {
+            let dotted = base_dir.join(".");
+            let same = paths_refer_to_same_location(&base_dir, &dotted)
+                .expect("compare dotted path failed");
+            assert!(same);
+        });
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn paths_refer_to_same_location_is_case_insensitive_on_windows() {
+        with_temp_dir("QuickClipboard-Case-Compare", |base_dir| {
+            let upper = PathBuf::from(base_dir.to_string_lossy().to_uppercase());
+            let lower = PathBuf::from(base_dir.to_string_lossy().to_lowercase());
+            let same = paths_refer_to_same_location(&upper, &lower)
+                .expect("compare case-insensitive path failed");
+            assert!(same);
+        });
+    }
+
+    #[test]
+    fn paths_refer_to_same_location_distinguishes_different_dirs() {
+        with_temp_dir("quickclipboard-path-diff", |base_dir| {
+            let sibling = base_dir.join("..")
+                .join(format!("{}-other", base_dir.file_name().and_then(|v| v.to_str()).unwrap_or("dir")));
+            fs::create_dir_all(&sibling).expect("create sibling dir failed");
+
+            let same = paths_refer_to_same_location(&base_dir, &sibling)
+                .expect("compare different dirs failed");
+            assert!(!same);
+
+            fs::remove_dir_all(&sibling).expect("remove sibling dir failed");
+        });
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn clean_storage_artifacts_returns_error_when_db_file_cannot_be_removed() {
+        with_temp_dir("quickclipboard-clean-test", |base_dir| {
+            let db_path = base_dir.join("quickclipboard.db");
+            fs::create_dir_all(&db_path).expect("create fake db dir failed");
+
+            let result = clean_storage_artifacts(&base_dir);
+            assert!(result.is_err(), "expected cleanup to fail for invalid db path type");
+            let message = result.err().unwrap_or_default();
+            assert!(message.contains("数据库文件"), "unexpected error message: {}", message);
+
+            fs::remove_dir_all(&db_path).expect("remove fake db dir failed");
+        });
+    }
+
+    #[test]
+    fn clean_storage_artifacts_removes_known_files_and_dirs() {
+        with_temp_dir("quickclipboard-clean-success", |base_dir| {
+            let clipboard_images = base_dir.join("clipboard_images");
+            let image_library = base_dir.join("image_library");
+            let app_icons = base_dir.join("app_icons");
+            fs::create_dir_all(&clipboard_images).expect("create clipboard_images failed");
+            fs::create_dir_all(&image_library).expect("create image_library failed");
+            fs::create_dir_all(&app_icons).expect("create app_icons failed");
+            fs::write(clipboard_images.join("a.txt"), b"x").expect("seed clipboard_images failed");
+            fs::write(image_library.join("b.txt"), b"x").expect("seed image_library failed");
+            fs::write(app_icons.join("c.txt"), b"x").expect("seed app_icons failed");
+            fs::write(base_dir.join("quickclipboard.db"), b"db").expect("seed db failed");
+            fs::write(base_dir.join("quickclipboard.db-shm"), b"shm").expect("seed shm failed");
+            fs::write(base_dir.join("quickclipboard.db-wal"), b"wal").expect("seed wal failed");
+
+            clean_storage_artifacts(&base_dir).expect("cleanup should succeed");
+
+            assert!(!clipboard_images.exists());
+            assert!(!image_library.exists());
+            assert!(!app_icons.exists());
+            assert!(!base_dir.join("quickclipboard.db").exists());
+            assert!(!base_dir.join("quickclipboard.db-shm").exists());
+            assert!(!base_dir.join("quickclipboard.db-wal").exists());
+        });
     }
 
     #[test]

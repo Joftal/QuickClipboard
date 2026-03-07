@@ -1,5 +1,5 @@
 use parking_lot::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use tauri::{Manager, WebviewWindow};
 
 static LAST_FOCUS_HWND: Mutex<Option<isize>> = Mutex::new(None);
@@ -16,14 +16,25 @@ pub struct ForegroundAppInfo {
 
 #[cfg(windows)]
 static EXCLUDED_HWNDS: Mutex<Vec<isize>> = Mutex::new(Vec::new());
+#[cfg(windows)]
+static LISTENER_THREAD: Mutex<Option<std::thread::JoinHandle<()>>> = Mutex::new(None);
+#[cfg(windows)]
+static LISTENER_THREAD_ID: AtomicU32 = AtomicU32::new(0);
+#[cfg(windows)]
+static LISTENER_LIFECYCLE_LOCK: Mutex<()> = Mutex::new(());
 
 // 启动焦点变化监听器
 pub fn start_focus_listener(app_handle: tauri::AppHandle) {
     #[cfg(windows)]
     {
-        if LISTENER_RUNNING.swap(true, Ordering::SeqCst) {
+        let _lifecycle_guard = LISTENER_LIFECYCLE_LOCK.lock();
+
+        if LISTENER_RUNNING.load(Ordering::SeqCst) {
             return;
         }
+
+        stop_focus_listener_inner();
+        LISTENER_RUNNING.store(true, Ordering::SeqCst);
         
         let mut excluded = Vec::new();
         for label in ["main", "context-menu", "settings", "preview"] {
@@ -36,10 +47,14 @@ pub fn start_focus_listener(app_handle: tauri::AppHandle) {
         *EXCLUDED_HWNDS.lock() = excluded;
 
         crate::services::system::hotkey::sync_hotkeys_for_foreground();
-        
-        std::thread::spawn(|| {
-            start_win_event_hook();
+
+        let (ready_tx, ready_rx) = std::sync::mpsc::sync_channel(1);
+        let handle = std::thread::spawn(move || {
+            start_win_event_hook(ready_tx);
         });
+
+        *LISTENER_THREAD.lock() = Some(handle);
+        let _ = ready_rx.recv();
     }
     
     #[cfg(not(windows))]
@@ -50,7 +65,46 @@ pub fn start_focus_listener(app_handle: tauri::AppHandle) {
 
 // 停止焦点变化监听器
 pub fn stop_focus_listener() {
+    #[cfg(windows)]
+    {
+        let _lifecycle_guard = LISTENER_LIFECYCLE_LOCK.lock();
+        stop_focus_listener_inner();
+    }
+
+    #[cfg(not(windows))]
+    {
+        LISTENER_RUNNING.store(false, Ordering::SeqCst);
+    }
+}
+
+#[cfg(windows)]
+fn stop_focus_listener_inner() {
     LISTENER_RUNNING.store(false, Ordering::SeqCst);
+    signal_focus_listener_exit();
+
+    let handle = LISTENER_THREAD.lock().take();
+    if let Some(handle) = handle {
+        if let Err(error) = handle.join() {
+            eprintln!("焦点监听线程退出失败: {:?}", error);
+        }
+    }
+
+    LISTENER_THREAD_ID.store(0, Ordering::SeqCst);
+}
+
+#[cfg(windows)]
+fn signal_focus_listener_exit() {
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_QUIT};
+
+    let thread_id = LISTENER_THREAD_ID.load(Ordering::SeqCst);
+    if thread_id == 0 {
+        return;
+    }
+
+    if let Err(error) = unsafe { PostThreadMessageW(thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) } {
+        eprintln!("发送焦点监听退出信号失败: {:?}", error);
+    }
 }
 
 #[cfg(windows)]
@@ -185,14 +239,21 @@ pub fn get_foreground_app_info() -> Option<ForegroundAppInfo> {
 }
 
 #[cfg(windows)]
-fn start_win_event_hook() {
+fn start_win_event_hook(ready_tx: std::sync::mpsc::SyncSender<()>) {
     use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent};
+    use windows::Win32::System::Threading::GetCurrentThreadId;
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetMessageW, TranslateMessage, DispatchMessageW, MSG,
+        DispatchMessageW, GetMessageW, PeekMessageW, TranslateMessage, MSG, PM_NOREMOVE,
         EVENT_SYSTEM_FOREGROUND, WINEVENT_OUTOFCONTEXT,
     };
     
     unsafe {
+        let thread_id = GetCurrentThreadId();
+        let mut message = MSG::default();
+        let _ = PeekMessageW(&mut message, None, 0, 0, PM_NOREMOVE);
+        LISTENER_THREAD_ID.store(thread_id, Ordering::SeqCst);
+        let _ = ready_tx.send(());
+
         let hook = SetWinEventHook(
             EVENT_SYSTEM_FOREGROUND,
             EVENT_SYSTEM_FOREGROUND,
@@ -204,19 +265,25 @@ fn start_win_event_hook() {
         );
         
         if hook.0.is_null() {
+            LISTENER_THREAD_ID.store(0, Ordering::SeqCst);
             LISTENER_RUNNING.store(false, Ordering::SeqCst);
             return;
         }
         
         let mut msg = MSG::default();
         while LISTENER_RUNNING.load(Ordering::SeqCst) {
-            if GetMessageW(&mut msg, None, 0, 0).as_bool() {
-                let _ = TranslateMessage(&msg);
-                DispatchMessageW(&msg);
+            let message_result = GetMessageW(&mut msg, None, 0, 0);
+            if message_result.0 == -1 || !message_result.as_bool() {
+                break;
             }
+
+            let _ = TranslateMessage(&msg);
+            DispatchMessageW(&msg);
         }
         
         let _ = UnhookWinEvent(hook);
+        LISTENER_THREAD_ID.store(0, Ordering::SeqCst);
+        LISTENER_RUNNING.store(false, Ordering::SeqCst);
     }
 }
 

@@ -280,6 +280,7 @@ pub fn run() {
             match event {
                 tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } => {
                     if label == "main" {
+                        focus::stop_focus_listener();
                         app.exit(0);
                     }
                 }

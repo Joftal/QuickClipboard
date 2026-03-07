@@ -31,9 +31,7 @@ chrono = "0.4"
 dirs = "5.0"
 sha2 = "0.10"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "time", "fs", "io-util"] }
-fastrand = "2.0"
 regex = "1.11.1"
-reqwest = { version = "0.11", features = ["json", "stream", "blocking"] }
 file_icon_provider = {git="https://github.com/iohannrabeson/file_icon_provider"}
 parking_lot = "0.12"
 tauri-plugin-drag = "2"

@@ -294,7 +294,7 @@ function QuickPasteWindow() {
       if (settings.pasteWithFormat && item.html_content) {
         return (
           <div className="w-full h-7 overflow-hidden">
-            <HtmlContent htmlContent={item.html_content} lineClampClass="line-clamp-1" />
+            <HtmlContent htmlContent={item.html_content} />
           </div>
         );
       }

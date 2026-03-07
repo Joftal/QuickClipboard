@@ -10,7 +10,6 @@ const ERROR_SRC = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjE
 // HTML 富文本内容组件
 function HtmlContent({
   htmlContent,
-  lineClampClass,
   searchKeyword
 }) {
   const contentRef = useRef(null);
