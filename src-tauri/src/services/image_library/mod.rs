@@ -1,6 +1,8 @@
-use std::{fs, path::{Component, Path, PathBuf}};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::{collections::HashMap, fs, path::{Component, Path, PathBuf}};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 use serde::{Serialize, Deserialize};
 use crate::services::get_data_directory;
 
@@ -9,6 +11,9 @@ const IMAGES_SUBDIR: &str = "images";
 const GIFS_SUBDIR: &str = "gifs";
 
 static IMAGE_SAVE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+static IMAGE_LIST_CACHE: Lazy<Mutex<HashMap<String, CachedImageList>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+static OCR_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageInfo {
@@ -24,6 +29,29 @@ pub struct ImageInfo {
 pub struct ImageListResult {
     pub total: usize,
     pub items: Vec<ImageInfo>,
+}
+
+#[derive(Debug, Clone)]
+struct CachedImageList {
+    dir_stamp_ms: Option<u64>,
+    items: Vec<ImageInfo>,
+}
+
+struct OcrInFlightGuard;
+
+impl OcrInFlightGuard {
+    fn try_acquire() -> Option<Self> {
+        OCR_IN_FLIGHT
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .ok()
+            .map(|_| OcrInFlightGuard)
+    }
+}
+
+impl Drop for OcrInFlightGuard {
+    fn drop(&mut self) {
+        OCR_IN_FLIGHT.store(false, Ordering::Release);
+    }
 }
 
 // 获取图片库目录路径
@@ -60,6 +88,103 @@ pub fn init_image_library() -> Result<(), String> {
     Ok(())
 }
 
+fn image_category_key(category: &str) -> &'static str {
+    match category {
+        "gifs" => "gifs",
+        _ => "images",
+    }
+}
+
+fn allowed_image_extension(path: &Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .unwrap_or_default();
+
+    matches!(
+        ext.as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "avif" | "svg" | "ico" | "tiff" | "tif" | "heic" | "heif" | "jfif"
+    )
+}
+
+fn get_dir_stamp_ms(dir: &Path) -> Result<Option<u64>, String> {
+    if !dir.exists() {
+        return Ok(None);
+    }
+
+    let modified = fs::metadata(dir)
+        .map_err(|e| format!("读取图库目录元数据失败: {}", e))?
+        .modified()
+        .map_err(|e| format!("读取图库目录修改时间失败: {}", e))?;
+
+    Ok(modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_millis() as u64))
+}
+
+fn build_cached_image_list(dir: &Path, category: &str) -> Result<CachedImageList, String> {
+    let dir_stamp_ms = get_dir_stamp_ms(dir)?;
+
+    if !dir.exists() {
+        return Ok(CachedImageList {
+            dir_stamp_ms,
+            items: Vec::new(),
+        });
+    }
+
+    let mut items = Vec::new();
+    for entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if !path.is_file() || !allowed_image_extension(&path) {
+            continue;
+        }
+
+        let metadata = entry.metadata().ok();
+        let created_at = metadata.as_ref()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+        let size = metadata.map(|m| m.len()).unwrap_or(0);
+        let filename = entry.file_name().to_string_lossy().to_string();
+
+        items.push(ImageInfo {
+            id: filename.clone(),
+            filename,
+            path: path.to_string_lossy().to_string(),
+            size,
+            created_at,
+            category: category.to_string(),
+        });
+    }
+
+    items.sort_by(|a, b| {
+        b.created_at
+            .cmp(&a.created_at)
+            .then_with(|| a.filename.cmp(&b.filename))
+    });
+
+    Ok(CachedImageList { dir_stamp_ms, items })
+}
+
+fn get_cached_image_list(dir: &Path, category: &str) -> Result<CachedImageList, String> {
+    let cache_key = image_category_key(category).to_string();
+    let dir_stamp_ms = get_dir_stamp_ms(dir)?;
+
+    if let Some(cached) = IMAGE_LIST_CACHE.lock().get(&cache_key).cloned() {
+        if cached.dir_stamp_ms == dir_stamp_ms {
+            return Ok(cached);
+        }
+    }
+
+    let rebuilt = build_cached_image_list(dir, category)?;
+    IMAGE_LIST_CACHE.lock().insert(cache_key, rebuilt.clone());
+    Ok(rebuilt)
+}
+
 // 通过文件头魔数判断是否为 GIF
 fn is_gif_by_magic(data: &[u8]) -> bool {
     if data.len() < 6 {
@@ -82,11 +207,9 @@ fn is_animated_webp(data: &[u8]) -> bool {
         return false;
     }
     
-    if data.len() >= 16 && &data[12..16] == b"VP8X" {
-        if data.len() >= 21 {
-            let flags = data[20];
-            return (flags & 0x02) != 0;
-        }
+    if data.len() >= 21 && &data[12..16] == b"VP8X" {
+        let flags = data[20];
+        return (flags & 0x02) != 0;
     }
     false
 }
@@ -127,27 +250,40 @@ fn extract_gif_first_frame(data: &[u8]) -> Option<Vec<u8>> {
     Some(buffer)
 }
 
+fn run_ocr_task_with_timeout<T, F>(task: F, timeout: Duration) -> Option<T>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Option<T> + Send + 'static,
+{
+    use std::sync::mpsc;
+    use std::thread;
+
+    let guard = OcrInFlightGuard::try_acquire()?;
+    let (tx, rx) = mpsc::channel();
+
+    let spawn_result = thread::Builder::new()
+        .name("il_ocr".to_string())
+        .spawn(move || {
+            let _guard = guard;
+            let _ = tx.send(task());
+        });
+
+    if spawn_result.is_err() {
+        return None;
+    }
+
+    rx.recv_timeout(timeout).unwrap_or_default()
+}
+
 // 使用 OCR 识别图片文字
 fn ocr_image_text(data: &[u8]) -> Option<String> {
     use qcocr::recognize_from_bytes;
-    use std::sync::mpsc;
-    use std::thread;
-    
-    let (tx, rx) = mpsc::channel();
-    let data = data.to_vec();
-    let _ = thread::Builder::new()
-        .name("il_ocr".to_string())
-        .spawn(move || {
-            let res = recognize_from_bytes(&data, None)
-                .ok()
-                .map(|r| r.text);
-            let _ = tx.send(res);
-        });
 
-    let text = match rx.recv_timeout(Duration::from_secs(2)) {
-        Ok(Some(text)) => text,
-        _ => return None,
-    };
+    let data = data.to_vec();
+    let text = run_ocr_task_with_timeout(
+        move || recognize_from_bytes(&data, None).ok().map(|r| r.text),
+        Duration::from_secs(2),
+    )?;
 
     let text = text.trim();
     
@@ -266,90 +402,24 @@ pub fn get_image_list(category: &str, offset: usize, limit: usize) -> Result<Ima
         "gifs" => (get_gifs_dir()?, "gifs"),
         _ => (get_images_dir()?, "images"),
     };
-    
-    let mut items: Vec<ImageInfo> = Vec::new();
-    
-    if dir.exists() {
-        let entries: Vec<_> = fs::read_dir(&dir)
-            .map_err(|e| e.to_string())?
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.path().is_file() && {
-                    let ext = e.path().extension()
-                        .and_then(|e| e.to_str())
-                        .map(|e| e.to_lowercase())
-                        .unwrap_or_default();
-                    matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "avif" | "svg" | "ico" | "tiff" | "tif" | "heic" | "heif" | "jfif")
-                }
-            })
-            .collect();
-        
-        let total = entries.len();
-        
-        let mut sorted_entries = entries;
-        sorted_entries.sort_by(|a, b| {
-            let time_a = a.metadata().and_then(|m| m.modified()).ok();
-            let time_b = b.metadata().and_then(|m| m.modified()).ok();
-            time_b.cmp(&time_a)
-        });
-        
-        for entry in sorted_entries.into_iter().skip(offset).take(limit) {
-            let path = entry.path();
-            let filename = entry.file_name().to_string_lossy().to_string();
-            let metadata = entry.metadata().ok();
-            
-            let created_at = metadata.as_ref()
-                .and_then(|m| m.modified().ok())
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_millis() as u64)
-                .unwrap_or(0);
-            
-            let size = metadata.map(|m| m.len()).unwrap_or(0);
-            
-            items.push(ImageInfo {
-                id: filename.clone(),
-                filename,
-                path: path.to_string_lossy().to_string(),
-                size,
-                created_at,
-                category: cat_str.to_string(),
-            });
-        }
-        
-        return Ok(ImageListResult { total, items });
-    }
-    
-    Ok(ImageListResult { total: 0, items: vec![] })
+
+    let cached = get_cached_image_list(&dir, cat_str)?;
+    let total = cached.items.len();
+    let items = cached.items.into_iter().skip(offset).take(limit).collect();
+
+    Ok(ImageListResult { total, items })
 }
 
 // 获取图片总数
 pub fn get_image_count(category: &str) -> Result<usize, String> {
     init_image_library()?;
     
-    let dir = match category {
-        "gifs" => get_gifs_dir()?,
-        _ => get_images_dir()?,
+    let (dir, cat_str) = match category {
+        "gifs" => (get_gifs_dir()?, "gifs"),
+        _ => (get_images_dir()?, "images"),
     };
-    
-    if !dir.exists() {
-        return Ok(0);
-    }
-    
-    let count = fs::read_dir(&dir)
-        .map_err(|e| e.to_string())?
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path().is_file() && {
-                let ext = e.path().extension()
-                    .and_then(|e| e.to_str())
-                    .map(|e| e.to_lowercase())
-                    .unwrap_or_default();
-                matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "avif" | "svg" | "ico" | "tiff" | "tif" | "heic" | "heif" | "jfif")
-            }
-        })
-        .count();
-    
-    Ok(count)
+
+    Ok(get_cached_image_list(&dir, cat_str)?.items.len())
 }
 
 fn sanitize_library_filename(filename: &str, field_name: &str) -> Result<String, String> {
@@ -537,5 +607,68 @@ mod tests {
             assert_eq!(file_path, images_dir.join("999_1_same.png"));
             assert!(existing.exists());
         });
+    }
+
+    #[test]
+    fn get_image_count_refreshes_after_external_file_change() {
+        with_test_image_library(|_data_dir| {
+            let images_dir = get_images_dir().expect("get images dir failed");
+
+            let initial = get_image_count("images").expect("get initial count failed");
+            assert_eq!(initial, 0);
+
+            std::thread::sleep(Duration::from_millis(5));
+            fs::write(images_dir.join("manual.png"), b"manual").expect("write manual file failed");
+
+            let refreshed = get_image_count("images").expect("get refreshed count failed");
+            assert_eq!(refreshed, 1);
+        });
+    }
+
+    #[test]
+    fn get_image_list_refreshes_after_external_file_change() {
+        with_test_image_library(|_data_dir| {
+            let images_dir = get_images_dir().expect("get images dir failed");
+            fs::write(images_dir.join("200_0_b.png"), b"b").expect("write first image failed");
+
+            let first = get_image_list("images", 0, 10).expect("get first list failed");
+            assert_eq!(first.total, 1);
+            assert_eq!(first.items.len(), 1);
+
+            std::thread::sleep(Duration::from_millis(5));
+            fs::write(images_dir.join("300_0_c.png"), b"c").expect("write second image failed");
+
+            let second = get_image_list("images", 0, 10).expect("get second list failed");
+            assert_eq!(second.total, 2);
+            assert_eq!(second.items.len(), 2);
+        });
+    }
+
+    #[test]
+    fn ocr_task_rejects_concurrent_requests_until_running_task_finishes() {
+        let _guard = lock_global_test_state();
+
+        let first = run_ocr_task_with_timeout(
+            || {
+                std::thread::sleep(Duration::from_millis(50));
+                Some("first".to_string())
+            },
+            Duration::from_millis(5),
+        );
+        assert!(first.is_none(), "expected first OCR task to time out");
+
+        let second = run_ocr_task_with_timeout(
+            || Some("second".to_string()),
+            Duration::from_millis(5),
+        );
+        assert!(second.is_none(), "expected concurrent OCR task to be rejected while first is still running");
+
+        std::thread::sleep(Duration::from_millis(60));
+
+        let third = run_ocr_task_with_timeout(
+            || Some("third".to_string()),
+            Duration::from_millis(20),
+        );
+        assert_eq!(third.as_deref(), Some("third"));
     }
 }
