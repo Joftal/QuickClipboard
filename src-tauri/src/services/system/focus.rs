@@ -155,8 +155,6 @@ pub fn get_last_focus_hwnd() -> Option<isize> {
 pub fn get_foreground_app_info() -> Option<ForegroundAppInfo> {
     #[cfg(windows)]
     {
-        use windows::Win32::System::ProcessStatus::GetModuleFileNameExW;
-        use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ};
         use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId};
 
         unsafe {
@@ -186,40 +184,11 @@ pub fn get_foreground_app_info() -> Option<ForegroundAppInfo> {
                 String::new()
             };
 
-            let mut process_path = String::new();
-            let mut process_name = String::new();
-
-            if let Ok(handle) = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid) {
-                let mut buffer = [0u16; 260];
-                let len = GetModuleFileNameExW(Some(handle), None, &mut buffer);
-                if len > 0 {
-                    process_path = String::from_utf16_lossy(&buffer[..len as usize]);
-                    process_name = process_path
-                        .split('\\')
-                        .last()
-                        .unwrap_or(&process_path)
-                        .to_string();
-                }
-            }
-
-            if process_name.is_empty() {
-                if let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
-                    let mut buffer = [0u16; 260];
-                    let len = GetModuleFileNameExW(Some(handle), None, &mut buffer);
-                    if len > 0 {
-                        process_path = String::from_utf16_lossy(&buffer[..len as usize]);
-                        process_name = process_path
-                            .split('\\')
-                            .last()
-                            .unwrap_or(&process_path)
-                            .to_string();
-                    }
-                }
-            }
-
-            if process_name.is_empty() {
+            let Some((process_path, process_name)) =
+                crate::services::system::process::query_process_path_and_name(pid)
+            else {
                 return None;
-            }
+            };
 
             let info = ForegroundAppInfo {
                 process_name,

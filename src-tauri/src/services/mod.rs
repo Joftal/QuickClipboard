@@ -11,7 +11,7 @@ pub use settings::{AppSettings, get_settings, update_settings, get_data_director
 pub use system::hotkey;
 
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 #[cfg(test)]
 pub(crate) mod test_support {
@@ -71,6 +71,14 @@ pub fn is_portable_build() -> bool {
         .unwrap_or(false)
 }
 
+fn is_single_normal_path(path: &Path) -> bool {
+    let mut components = path.components();
+    matches!(
+        (components.next(), components.next()),
+        (Some(Component::Normal(_)), None)
+    )
+}
+
 fn resolve_clipboard_image_paths(data_dir: &Path, image_ref: &str) -> Vec<PathBuf> {
     let normalized = image_ref.trim().replace('\\', "/");
     if normalized.is_empty() {
@@ -78,7 +86,12 @@ fn resolve_clipboard_image_paths(data_dir: &Path, image_ref: &str) -> Vec<PathBu
     }
 
     if let Some(relative) = normalized.strip_prefix("clipboard_images/") {
-        return vec![data_dir.join("clipboard_images").join(relative)];
+        let relative_path = Path::new(relative);
+        if !is_single_normal_path(relative_path) {
+            return Vec::new();
+        }
+
+        return vec![data_dir.join("clipboard_images").join(relative_path)];
     }
 
     let file_name = Path::new(&normalized)
@@ -88,6 +101,11 @@ fn resolve_clipboard_image_paths(data_dir: &Path, image_ref: &str) -> Vec<PathBu
         .trim();
 
     if file_name.is_empty() {
+        return Vec::new();
+    }
+
+    let file_name_path = Path::new(file_name);
+    if !is_single_normal_path(file_name_path) {
         return Vec::new();
     }
 
@@ -122,8 +140,39 @@ pub fn delete_clipboard_image_files(image_refs: &[String]) -> Result<(), String>
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_clipboard_image_paths;
+    use super::{delete_clipboard_image_files, resolve_clipboard_image_paths};
+    use crate::services::settings::{get_settings, replace_settings, AppSettings};
+    use crate::services::test_support::lock_global_test_state;
     use std::path::Path;
+    use std::{fs, path::PathBuf};
+    use uuid::Uuid;
+
+    fn with_test_data_dir(test: impl FnOnce(PathBuf)) {
+        let _guard = lock_global_test_state();
+        let original_settings = get_settings();
+        let data_dir = std::env::temp_dir().join(format!(
+            "quickclipboard-services-test-{}",
+            Uuid::new_v4()
+        ));
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            fs::create_dir_all(data_dir.join("clipboard_images"))
+                .expect("create clipboard_images failed");
+            replace_settings(AppSettings {
+                use_custom_storage: true,
+                custom_storage_path: Some(data_dir.to_string_lossy().to_string()),
+                ..AppSettings::default()
+            });
+            test(data_dir.clone());
+        }));
+
+        replace_settings(original_settings);
+        let _ = fs::remove_dir_all(&data_dir);
+
+        if let Err(panic) = result {
+            std::panic::resume_unwind(panic);
+        }
+    }
 
     #[test]
     fn resolve_clipboard_image_paths_supports_bare_id() {
@@ -147,5 +196,26 @@ mod tests {
         let paths = resolve_clipboard_image_paths(data_dir, "demo.png");
 
         assert_eq!(paths, vec![data_dir.join("clipboard_images").join("demo.png")]);
+    }
+
+    #[test]
+    fn resolve_clipboard_image_paths_rejects_prefixed_parent_dir_escape() {
+        let data_dir = Path::new("C:/data");
+        let paths = resolve_clipboard_image_paths(data_dir, "clipboard_images/../../outside.txt");
+
+        assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn delete_clipboard_image_files_does_not_delete_outside_target_dir() {
+        with_test_data_dir(|data_dir| {
+            let outside_file = data_dir.join("outside.txt");
+            fs::write(&outside_file, b"outside").expect("write outside file failed");
+
+            delete_clipboard_image_files(&["clipboard_images/../../outside.txt".to_string()])
+                .expect("delete should ignore unsafe refs");
+
+            assert!(outside_file.exists());
+        });
     }
 }

@@ -369,6 +369,7 @@ pub fn set_last_hash_file(file_path: &str) {
 mod tests {
     use super::*;
     use crate::services::clipboard::capture::ContentType;
+    use crate::services::test_support::lock_global_test_state;
 
     fn text_content(text: &str) -> ClipboardContent {
         ClipboardContent {
@@ -381,6 +382,7 @@ mod tests {
 
     #[test]
     fn reconcile_removes_failed_hashes_when_snapshot_matches() {
+        let _guard = lock_global_test_state();
         clear_last_content_cache();
 
         let first = text_content("first");
@@ -398,6 +400,7 @@ mod tests {
 
     #[test]
     fn reconcile_does_not_override_newer_snapshot() {
+        let _guard = lock_global_test_state();
         clear_last_content_cache();
 
         let original = vec![text_content("old").calculate_hash()];

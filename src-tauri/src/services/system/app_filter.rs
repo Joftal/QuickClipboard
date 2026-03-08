@@ -283,42 +283,14 @@ mod windows_impl {
 
     // 通过进程ID获取进程名称
     fn get_process_name_by_id(process_id: u32) -> (String, String) {
-        use windows::Win32::System::Threading::{
-            OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_VM_READ,
-        };
-        use windows::Win32::System::ProcessStatus::GetModuleFileNameExW;
-
-        unsafe {
-            if let Ok(handle) = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, process_id) {
-                let mut buffer = [0u16; 260];
-                let len = GetModuleFileNameExW(Some(handle), None, &mut buffer);
-                if len > 0 {
-                    let path = String::from_utf16_lossy(&buffer[..len as usize]);
-                    let name = path.split('\\').last().unwrap_or(&path).to_string();
-                    return (path, name);
-                }
-            }
-
-            if let Ok(handle) = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, process_id) {
-                let mut buffer = [0u16; 260];
-                let len = GetModuleFileNameExW(Some(handle), None, &mut buffer);
-                if len > 0 {
-                    let path = String::from_utf16_lossy(&buffer[..len as usize]);
-                    let name = path.split('\\').last().unwrap_or(&path).to_string();
-                    return (path, name);
-                }
-            }
-
-            (String::new(), String::new())
-        }
+        crate::services::system::process::query_process_path_and_name(process_id)
+            .unwrap_or_else(|| (String::new(), String::new()))
     }
 
     // 获取 UWP 应用真实名称
     fn get_uwp_app_name(hwnd: windows::Win32::Foundation::HWND) -> Option<String> {
         use windows::Win32::UI::WindowsAndMessaging::{EnumChildWindows, GetWindowThreadProcessId};
         use windows::Win32::Foundation::LPARAM;
-        use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
-        use windows::Win32::System::ProcessStatus::GetModuleFileNameExW;
         use windows::core::BOOL;
 
         struct Context {
@@ -338,16 +310,10 @@ mod windows_impl {
                 GetWindowThreadProcessId(child, Some(&mut child_pid));
 
                 if child_pid > 0 && child_pid != ctx.parent_pid {
-                    if let Ok(handle) = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, child_pid) {
-                        let mut buffer = [0u16; 260];
-                        let len = GetModuleFileNameExW(Some(handle), None, &mut buffer);
-                        if len > 0 {
-                            let path = String::from_utf16_lossy(&buffer[..len as usize]);
-                            let name = path.split('\\').last().unwrap_or(&path).to_string();
-                            if !name.is_empty() && name.to_lowercase() != "applicationframehost.exe" {
-                                ctx.result = Some(name);
-                                return BOOL(0);
-                            }
+                    if let Some((_, name)) = crate::services::system::process::query_process_path_and_name(child_pid) {
+                        if !name.is_empty() && name.to_lowercase() != "applicationframehost.exe" {
+                            ctx.result = Some(name);
+                            return BOOL(0);
                         }
                     }
                 }
@@ -365,8 +331,6 @@ mod windows_impl {
         use windows::Win32::UI::WindowsAndMessaging::{
             EnumWindows, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
         };
-        use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_INFORMATION, PROCESS_VM_READ};
-        use windows::Win32::System::ProcessStatus::GetModuleFileNameExW;
         use windows::core::BOOL;
 
         let mut windows: Vec<AppInfo> = Vec::new();
@@ -384,19 +348,13 @@ mod windows_impl {
                     if title_len > 0 {
                         let title = String::from_utf16_lossy(&title_buf[..title_len as usize]);
                         if !title.trim().is_empty() && title != "Program Manager" {
-                            if let Ok(handle) = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, false, pid) {
-                                let mut buf = [0u16; 260];
-                                let len = GetModuleFileNameExW(Some(handle), None, &mut buf);
-                                if len > 0 {
-                                    let path = String::from_utf16_lossy(&buf[..len as usize]);
-                                    let name = path.split('\\').last().unwrap_or(&path).to_string();
-                                    windows.push(AppInfo {
-                                        name: title,
-                                        process: name,
-                                        path: path.clone(),
-                                        icon: crate::utils::icon::get_file_icon_base64(&path),
-                                    });
-                                }
+                            if let Some((path, process)) = crate::services::system::process::query_process_path_and_name(pid) {
+                                windows.push(AppInfo {
+                                    name: title,
+                                    process,
+                                    path: path.clone(),
+                                    icon: crate::utils::icon::get_file_icon_base64(&path),
+                                });
                             }
                         }
                     }
