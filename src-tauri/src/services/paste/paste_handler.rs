@@ -192,8 +192,8 @@ fn update_item_content(clipboard_id: Option<i64>, favorite_id: Option<&str>, new
         
         if let Some(id) = clipboard_id {
             conn.execute(
-                "UPDATE clipboard SET content = ?, updated_at = ?, created_at = ? WHERE id = ?",
-                params![new_content, now, now, id],
+                "UPDATE clipboard SET content = ?, updated_at = ? WHERE id = ?",
+                params![new_content, now, id],
             )?;
         } else if let Some(id) = favorite_id {
             conn.execute(
@@ -203,4 +203,92 @@ fn update_item_content(clipboard_id: Option<i64>, favorite_id: Option<&str>, new
         }
         Ok(())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::update_item_content;
+    use crate::services::database::connection::{close_database, with_connection};
+    use crate::services::database::init_database;
+    use crate::services::settings::{get_settings, replace_settings, AppSettings};
+    use crate::services::test_support::lock_global_test_state;
+    use rusqlite::params;
+    use std::{fs, path::PathBuf};
+    use uuid::Uuid;
+
+    fn with_test_database(test: impl FnOnce(PathBuf)) {
+        let _guard = lock_global_test_state();
+        let original_settings = get_settings();
+        let data_dir = std::env::temp_dir().join(format!(
+            "quickclipboard-paste-handler-test-{}",
+            Uuid::new_v4()
+        ));
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            fs::create_dir_all(&data_dir).expect("create test data dir failed");
+            replace_settings(AppSettings {
+                use_custom_storage: true,
+                custom_storage_path: Some(data_dir.to_string_lossy().to_string()),
+                ..AppSettings::default()
+            });
+
+            let db_path = data_dir.join("quickclipboard.db");
+            init_database(db_path.to_string_lossy().as_ref()).expect("init test db failed");
+            test(data_dir.clone());
+        }));
+
+        close_database();
+        replace_settings(original_settings);
+        let _ = fs::remove_dir_all(&data_dir);
+
+        if let Err(panic) = result {
+            std::panic::resume_unwind(panic);
+        }
+    }
+
+    #[test]
+    fn update_item_content_preserves_created_at_for_clipboard_items() {
+        with_test_database(|_data_dir| {
+            with_connection(|conn| {
+                conn.execute(
+                    "INSERT INTO clipboard (
+                        content, html_content, content_type, image_id, item_order,
+                        is_pinned, paste_count, source_app, source_icon_hash, char_count,
+                        created_at, updated_at
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                    params![
+                        "image:legacy",
+                        Option::<String>::None,
+                        "image",
+                        Some("legacy"),
+                        1_i64,
+                        0_i64,
+                        0_i64,
+                        Option::<String>::None,
+                        Option::<String>::None,
+                        Option::<i64>::None,
+                        100_i64,
+                        100_i64,
+                    ],
+                )?;
+                Ok(())
+            }).expect("seed clipboard item failed");
+
+            update_item_content(Some(1), None, "files:{\"files\":[],\"operation\":\"copy\"}")
+                .expect("update clipboard item failed");
+
+            with_connection(|conn| {
+                let (content, created_at, updated_at): (String, i64, i64) = conn.query_row(
+                    "SELECT content, created_at, updated_at FROM clipboard WHERE id = 1",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )?;
+
+                assert_eq!(content, "files:{\"files\":[],\"operation\":\"copy\"}");
+                assert_eq!(created_at, 100_i64);
+                assert!(updated_at >= 100_i64);
+                Ok(())
+            }).expect("verify clipboard item failed");
+        });
+    }
 }

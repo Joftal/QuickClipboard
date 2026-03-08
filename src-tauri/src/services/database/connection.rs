@@ -162,6 +162,7 @@ fn create_tables(conn: &Connection) -> Result<(), String> {
         "CREATE INDEX IF NOT EXISTS idx_favorites_group ON favorites(group_name, item_order)",
         [],
     ).map_err(|e| format!("创建收藏索引失败: {}", e))?;
+    ensure_clipboard_search_index(conn)?;
     migrate_favorites_auto_titles(conn)?;
 
     Ok(())
@@ -180,6 +181,66 @@ fn list_table_columns(conn: &Connection, table: &str) -> Result<Vec<String>, Str
 
 fn has_column(conn: &Connection, table: &str, column: &str) -> Result<bool, String> {
     Ok(list_table_columns(conn, table)?.iter().any(|name| name == column))
+}
+
+fn has_table(conn: &Connection, table: &str) -> Result<bool, String> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+        [table],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(|exists| exists != 0)
+    .map_err(|e| format!("检查 {} 表是否存在失败: {}", table, e))
+}
+
+fn ensure_clipboard_search_index(conn: &Connection) -> Result<(), String> {
+    let fts_exists = has_table(conn, "clipboard_fts")?;
+
+    if !fts_exists {
+        conn.execute(
+            "CREATE VIRTUAL TABLE clipboard_fts USING fts5(
+                content,
+                content='clipboard',
+                content_rowid='id',
+                tokenize='trigram'
+            )",
+            [],
+        ).map_err(|e| format!("创建剪贴板全文索引失败: {}", e))?;
+    }
+
+    conn.execute_batch(
+        "CREATE TRIGGER IF NOT EXISTS clipboard_fts_ai AFTER INSERT ON clipboard BEGIN
+            INSERT INTO clipboard_fts(rowid, content) VALUES (new.id, new.content);
+        END;
+        CREATE TRIGGER IF NOT EXISTS clipboard_fts_ad AFTER DELETE ON clipboard BEGIN
+            INSERT INTO clipboard_fts(clipboard_fts, rowid, content) VALUES('delete', old.id, old.content);
+        END;
+        CREATE TRIGGER IF NOT EXISTS clipboard_fts_au AFTER UPDATE OF content ON clipboard BEGIN
+            INSERT INTO clipboard_fts(clipboard_fts, rowid, content) VALUES('delete', old.id, old.content);
+            INSERT INTO clipboard_fts(rowid, content) VALUES(new.id, new.content);
+        END;"
+    ).map_err(|e| format!("创建剪贴板全文索引触发器失败: {}", e))?;
+
+    let clipboard_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM clipboard",
+        [],
+        |row| row.get(0),
+    ).map_err(|e| format!("读取剪贴板记录数失败: {}", e))?;
+
+    let fts_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM clipboard_fts",
+        [],
+        |row| row.get(0),
+    ).map_err(|e| format!("读取剪贴板全文索引记录数失败: {}", e))?;
+
+    if !fts_exists || fts_count != clipboard_count {
+        conn.execute(
+            "INSERT INTO clipboard_fts(clipboard_fts) VALUES ('rebuild')",
+            [],
+        ).map_err(|e| format!("重建剪贴板全文索引失败: {}", e))?;
+    }
+
+    Ok(())
 }
 
 // 迁移 item_order（ASC → DESC）
@@ -294,6 +355,36 @@ mod tests {
         let conn = Connection::open_in_memory().expect("open in-memory db failed");
         let result = create_tables(&conn);
         assert!(result.is_ok(), "unexpected error: {:?}", result.err());
+    }
+
+    #[test]
+    fn create_tables_builds_clipboard_search_index_for_existing_rows() {
+        let conn = Connection::open_in_memory().expect("open in-memory db failed");
+        conn.execute_batch(
+            "CREATE TABLE clipboard (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                content TEXT NOT NULL,
+                html_content TEXT,
+                content_type TEXT NOT NULL DEFAULT 'text',
+                image_id TEXT,
+                item_order INTEGER NOT NULL DEFAULT 0,
+                is_pinned INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            INSERT INTO clipboard (content, html_content, content_type, image_id, item_order, is_pinned, created_at, updated_at)
+            VALUES ('hello world', NULL, 'text', NULL, 1, 0, 1, 1);"
+        ).expect("seed legacy clipboard failed");
+
+        create_tables(&conn).expect("create tables failed");
+
+        let matches: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM clipboard_fts WHERE clipboard_fts MATCH '\"ell\"'",
+            [],
+            |row| row.get(0),
+        ).expect("query clipboard_fts failed");
+
+        assert_eq!(matches, 1);
     }
 
     #[test]

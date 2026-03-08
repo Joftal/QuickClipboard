@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use tauri::{Manager, WebviewWindow};
 
 static LAST_FOCUS_HWND: Mutex<Option<isize>> = Mutex::new(None);
+static SAVED_FOCUS_HWND: Mutex<Option<isize>> = Mutex::new(None);
 static LISTENER_RUNNING: AtomicBool = AtomicBool::new(false);
 
 static LAST_FOREGROUND_CACHE: Mutex<Option<(isize, ForegroundAppInfo)>> = Mutex::new(None);
@@ -115,14 +116,50 @@ pub fn add_excluded_hwnd(hwnd: isize) {
     }
 }
 
+#[cfg(windows)]
+fn get_app_window_hwnds(app_handle: &tauri::AppHandle) -> Vec<isize> {
+    app_handle
+        .webview_windows()
+        .into_values()
+        .filter_map(|window| window.hwnd().ok().map(|hwnd| hwnd.0 as isize))
+        .collect()
+}
+
+fn select_restore_hwnd(saved_hwnd: Option<isize>, last_hwnd: Option<isize>) -> Option<isize> {
+    saved_hwnd.or(last_hwnd)
+}
+
 // 聚焦剪贴板窗口
 pub fn focus_clipboard_window(window: WebviewWindow) -> Result<(), String> {
     window.set_focus().map_err(|e| format!("设置窗口焦点失败: {}", e))
 }
 
 // 仅保存当前焦点（手动）
-pub fn save_current_focus(_app_handle: tauri::AppHandle) -> Result<(), String> {
-    Ok(())
+pub fn save_current_focus(app_handle: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+
+        let app_hwnds = get_app_window_hwnds(&app_handle);
+        let hwnd = unsafe { GetForegroundWindow() };
+        if hwnd.0.is_null() {
+            return Ok(());
+        }
+
+        let hwnd_val = hwnd.0 as isize;
+        if app_hwnds.contains(&hwnd_val) {
+            return Ok(());
+        }
+
+        *SAVED_FOCUS_HWND.lock() = Some(hwnd_val);
+        Ok(())
+    }
+
+    #[cfg(not(windows))]
+    {
+        let _ = app_handle;
+        Ok(())
+    }
 }
 
 // 恢复上次焦点窗口
@@ -130,12 +167,18 @@ pub fn restore_last_focus() -> Result<(), String> {
     #[cfg(windows)]
     {
         use windows::Win32::Foundation::HWND;
-        use windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
+        use windows::Win32::UI::WindowsAndMessaging::{IsWindow, SetForegroundWindow};
         use std::ffi::c_void;
-        
-        if let Some(hwnd_val) = *LAST_FOCUS_HWND.lock() {
+
+        let saved_hwnd = *SAVED_FOCUS_HWND.lock();
+        let last_hwnd = *LAST_FOCUS_HWND.lock();
+
+        if let Some(hwnd_val) = select_restore_hwnd(saved_hwnd, last_hwnd) {
+            let hwnd = HWND(hwnd_val as *mut c_void);
             unsafe {
-                let _ = SetForegroundWindow(HWND(hwnd_val as *mut c_void));
+                if IsWindow(Some(hwnd)).as_bool() {
+                    let _ = SetForegroundWindow(hwnd);
+                }
             }
         }
         Ok(())
@@ -150,6 +193,10 @@ pub fn restore_last_focus() -> Result<(), String> {
 // 获取当前记录的焦点窗口句柄
 pub fn get_last_focus_hwnd() -> Option<isize> {
     *LAST_FOCUS_HWND.lock()
+}
+
+pub fn get_saved_focus_hwnd() -> Option<isize> {
+    *SAVED_FOCUS_HWND.lock()
 }
 
 pub fn get_foreground_app_info() -> Option<ForegroundAppInfo> {
@@ -304,4 +351,24 @@ unsafe extern "system" fn focus_callback(
     *LAST_FOCUS_HWND.lock() = Some(hwnd_val);
 
     crate::services::system::hotkey::sync_hotkeys_for_foreground();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::select_restore_hwnd;
+
+    #[test]
+    fn select_restore_hwnd_prefers_saved_hwnd() {
+        assert_eq!(select_restore_hwnd(Some(1), Some(2)), Some(1));
+    }
+
+    #[test]
+    fn select_restore_hwnd_falls_back_to_last_hwnd() {
+        assert_eq!(select_restore_hwnd(None, Some(2)), Some(2));
+    }
+
+    #[test]
+    fn select_restore_hwnd_returns_none_when_no_focus_available() {
+        assert_eq!(select_restore_hwnd(None, None), None);
+    }
 }

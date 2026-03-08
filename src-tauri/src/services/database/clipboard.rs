@@ -86,6 +86,25 @@ pub fn update_missing_char_counts(items: Vec<ClipboardCharCountTask>) {
     }
 }
 
+fn normalize_search_keyword(search_keyword: Option<&String>) -> Option<String> {
+    search_keyword
+        .map(|keyword| keyword.trim())
+        .filter(|keyword| !keyword.is_empty())
+        .map(str::to_string)
+}
+
+fn build_clipboard_search_pattern(search_keyword: &str) -> String {
+    format!("%{}%", search_keyword)
+}
+
+fn build_clipboard_fts_query(search_keyword: &str) -> Option<String> {
+    if search_keyword.chars().count() < 3 {
+        return None;
+    }
+
+    Some(format!("\"{}\"", search_keyword.replace('"', "\"\"")))
+}
+
 // 按逗号拆分图片ID
 fn split_image_ids(s: &str) -> Vec<String> {
     s.split(',')
@@ -121,25 +140,30 @@ fn delete_image_files(image_ids: Vec<String>) -> Result<(), String> {
 
 // 分页查询剪贴板历史
 pub fn query_clipboard_items(params: QueryParams) -> Result<PaginatedResult<ClipboardItem>, String> {
-    let search_keyword = params.search.clone();
-    let has_filter = search_keyword.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false)
+    let search_keyword = normalize_search_keyword(params.search.as_ref());
+    let fts_query = search_keyword
+        .as_deref()
+        .and_then(build_clipboard_fts_query);
+    let has_filter = search_keyword.is_some()
         || params.content_type.as_ref().map(|t| t != "all").unwrap_or(false);
     
     with_connection(|conn| {
         let mut where_clauses = vec![];
         let mut query_params: Vec<Box<dyn rusqlite::ToSql>> = vec![];
+        let mut from_clause = "FROM clipboard".to_string();
         
-        if let Some(ref search) = search_keyword {
-            if !search.trim().is_empty() {
-                where_clauses.push("content LIKE ?");
-                let search_pattern = format!("%{}%", search);
-                query_params.push(Box::new(search_pattern));
-            }
+        if let Some(ref fts_query) = fts_query {
+            from_clause = "FROM clipboard INNER JOIN clipboard_fts ON clipboard_fts.rowid = clipboard.id".to_string();
+            where_clauses.push("clipboard_fts MATCH ?");
+            query_params.push(Box::new(fts_query.clone()));
+        } else if let Some(ref search) = search_keyword {
+            where_clauses.push("clipboard.content LIKE ?");
+            query_params.push(Box::new(build_clipboard_search_pattern(search)));
         }
         
         if let Some(ref content_type) = params.content_type {
             if content_type != "all" {
-                where_clauses.push("content_type LIKE ?");
+                where_clauses.push("clipboard.content_type LIKE ?");
                 let pattern = format!("%{}%", content_type);
                 query_params.push(Box::new(pattern));
             }
@@ -152,7 +176,7 @@ pub fn query_clipboard_items(params: QueryParams) -> Result<PaginatedResult<Clip
         };
         
         let total_count: i64 = if has_filter {
-            let count_sql = format!("SELECT COUNT(*) FROM clipboard {}", where_clause);
+            let count_sql = format!("SELECT COUNT(*) {} {}", from_clause, where_clause);
             let count_params: Vec<Box<dyn rusqlite::ToSql>> = query_params.iter().map(|p| {
                 let val: Box<dyn rusqlite::ToSql> = match p.as_ref().to_sql() {
                     Ok(rusqlite::types::ToSqlOutput::Borrowed(rusqlite::types::ValueRef::Text(s))) => {
@@ -176,11 +200,12 @@ pub fn query_clipboard_items(params: QueryParams) -> Result<PaginatedResult<Clip
         }
         
         let query_sql = format!(
-            "SELECT id, content, html_content, content_type, image_id, item_order, is_pinned, paste_count, source_app, source_icon_hash, created_at, updated_at, char_count 
-             FROM clipboard 
+            "SELECT clipboard.id, clipboard.content, clipboard.html_content, clipboard.content_type, clipboard.image_id, clipboard.item_order, clipboard.is_pinned, clipboard.paste_count, clipboard.source_app, clipboard.source_icon_hash, clipboard.created_at, clipboard.updated_at, clipboard.char_count 
+             {} 
              {} 
              ORDER BY is_pinned DESC, item_order DESC, updated_at DESC 
              LIMIT ? OFFSET ?",
+            from_clause,
             where_clause
         );
         
@@ -543,5 +568,110 @@ pub fn toggle_pin_clipboard_item(id: i64) -> Result<bool, String> {
             Ok(false)
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::database::connection::close_database;
+    use crate::services::database::init_database;
+    use crate::services::settings::{get_settings, replace_settings, AppSettings};
+    use crate::services::test_support::lock_global_test_state;
+    use rusqlite::params;
+    use std::{fs, path::PathBuf};
+    use uuid::Uuid;
+
+    fn with_test_database(test: impl FnOnce(PathBuf)) {
+        let _guard = lock_global_test_state();
+        let original_settings = get_settings();
+        let data_dir = std::env::temp_dir().join(format!(
+            "quickclipboard-db-clipboard-test-{}",
+            Uuid::new_v4()
+        ));
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            fs::create_dir_all(&data_dir).expect("create test data dir failed");
+            replace_settings(AppSettings {
+                use_custom_storage: true,
+                custom_storage_path: Some(data_dir.to_string_lossy().to_string()),
+                ..AppSettings::default()
+            });
+
+            let db_path = data_dir.join("quickclipboard.db");
+            init_database(db_path.to_string_lossy().as_ref()).expect("init test db failed");
+            test(data_dir.clone());
+        }));
+
+        close_database();
+        replace_settings(original_settings);
+        let _ = fs::remove_dir_all(&data_dir);
+
+        if let Err(panic) = result {
+            std::panic::resume_unwind(panic);
+        }
+    }
+
+    fn seed_clipboard_item(content: &str) {
+        with_connection(|conn| {
+            conn.execute(
+                "INSERT INTO clipboard (
+                    content, html_content, content_type, image_id, item_order,
+                    is_pinned, paste_count, source_app, source_icon_hash, char_count,
+                    created_at, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                params![
+                    content,
+                    Option::<String>::None,
+                    "text",
+                    Option::<String>::None,
+                    1_i64,
+                    0_i64,
+                    0_i64,
+                    Option::<String>::None,
+                    Option::<String>::None,
+                    Some(content.chars().count() as i64),
+                    1_i64,
+                    1_i64,
+                ],
+            )?;
+            Ok(())
+        }).expect("seed clipboard item failed");
+    }
+
+    #[test]
+    fn query_clipboard_items_supports_substring_search_via_fts() {
+        with_test_database(|_data_dir| {
+            seed_clipboard_item("hello world");
+
+            let result = query_clipboard_items(QueryParams {
+                offset: 0,
+                limit: 10,
+                search: Some("ell".to_string()),
+                content_type: None,
+            }).expect("query clipboard items failed");
+
+            assert_eq!(result.total_count, 1);
+            assert_eq!(result.items.len(), 1);
+            assert_eq!(result.items[0].content, "hello world");
+        });
+    }
+
+    #[test]
+    fn query_clipboard_items_falls_back_to_like_for_short_search_terms() {
+        with_test_database(|_data_dir| {
+            seed_clipboard_item("hello world");
+
+            let result = query_clipboard_items(QueryParams {
+                offset: 0,
+                limit: 10,
+                search: Some("he".to_string()),
+                content_type: None,
+            }).expect("query clipboard items failed");
+
+            assert_eq!(result.total_count, 1);
+            assert_eq!(result.items.len(), 1);
+            assert_eq!(result.items[0].content, "hello world");
+        });
+    }
 }
 
