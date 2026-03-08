@@ -63,14 +63,6 @@ pub fn resolve_stored_path(stored_path: &str) -> String {
     stored_path.to_string()
 }
 
-pub fn is_portable_build() -> bool {
-    std::env::current_exe()
-        .ok()
-        .and_then(|p| p.file_name().and_then(|s| s.to_str()).map(|s| s.to_ascii_lowercase()))
-        .map(|name| name.contains("portable"))
-        .unwrap_or(false)
-}
-
 fn is_single_normal_path(path: &Path) -> bool {
     let mut components = path.components();
     matches!(

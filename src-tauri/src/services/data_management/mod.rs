@@ -210,9 +210,6 @@ pub fn get_current_storage_dir() -> Result<PathBuf, String> {
 
 // mode: "source_only" | "target_only" | "merge"
 pub fn change_storage_dir(new_dir: PathBuf, mode: &str) -> Result<PathBuf, String> {
-    if crate::services::is_portable_build() || std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.join("portable.txt").exists())).unwrap_or(false) {
-        return Err("便携版不支持更改存储路径".into());
-    }
     if !new_dir.exists() { fs::create_dir_all(&new_dir).map_err(|e| e.to_string())?; }
 
     let current_dir = get_current_storage_dir()?;
@@ -455,9 +452,6 @@ fn reorder_clipboard_by_time(conn: &rusqlite::Connection) {
 }
 
 pub fn reset_storage_dir_to_default(mode: &str) -> Result<PathBuf, String> {
-    if crate::services::is_portable_build() || std::env::current_exe().ok().and_then(|e| e.parent().map(|p| p.join("portable.txt").exists())).unwrap_or(false) {
-        return Err("便携版不支持重置存储路径".into());
-    }
     let default_dir = get_default_data_dir()?;
     let current_dir = get_current_storage_dir()?;
 

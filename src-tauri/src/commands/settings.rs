@@ -123,15 +123,6 @@ pub fn get_all_windows_info_cmd() -> Result<Vec<crate::services::system::AppInfo
     Ok(crate::services::system::get_all_windows_info())
 }
 
-#[tauri::command]
-pub fn is_portable_mode() -> bool {
-    if crate::services::is_portable_build() { return true; }
-    use std::env;
-    env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|p| p.join("portable.txt").exists()))
-        .unwrap_or(false)
-}
 
 // 获取应用版本信息
 #[tauri::command]

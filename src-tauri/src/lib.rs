@@ -149,7 +149,6 @@ pub fn run() {
                 commands::get_settings_cmd,
                 commands::set_edge_hide_enabled,
                 commands::get_all_windows_info_cmd,
-                commands::is_portable_mode,
                 commands::get_app_version,
                 commands::set_auto_start,
                 commands::get_auto_start_status,
@@ -215,16 +214,6 @@ pub fn run() {
                 
                 let window = app.get_webview_window("main").ok_or("无法获取主窗口")?;
                 let _ = window.set_focusable(false);
-                if services::is_portable_build() {
-                    if let Ok(exe) = std::env::current_exe() {
-                        if let Some(dir) = exe.parent() {
-                            let marker = dir.join("portable.flag");
-                            if !marker.exists() {
-                                let _ = std::fs::write(&marker, b"portable\n");
-                            }
-                        }
-                    }
-                }
 
                 let db_path_buf = get_data_directory()?.join("quickclipboard.db");
                 let db_path_str = db_path_buf.to_str().ok_or("数据库路径无效")?;

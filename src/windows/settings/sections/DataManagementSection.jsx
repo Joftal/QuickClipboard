@@ -11,7 +11,6 @@ import { getCurrentStoragePath, getDefaultStoragePath, changeStoragePath, resetS
 import { showError, showMessage, showConfirm } from '@shared/utils/dialog';
 import { reloadAllWindows } from '@shared/api/window';
 import { resetSettingsToDefault } from '@shared/api/settings';
-import { isPortableMode } from '@shared/api/system';
 import { clearClipboardHistory } from '@shared/api/clipboard';
 import { clearLocalStorageForAppReset, clearLocalStorageForSettingsReset } from '@shared/utils/localStorageCleanup';
 function DataManagementSection() {
@@ -19,7 +18,6 @@ function DataManagementSection() {
     t
   } = useTranslation();
   const [storagePath, setStoragePath] = useState(t('common.loading'));
-  const [portable, setPortable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [busyText, setBusyText] = useState('');
   const [migrationDialog, setMigrationDialog] = useState(null); // { type: 'change' | 'reset', targetPath?: string, targetInfo?: object }
@@ -57,12 +55,6 @@ function DataManagementSection() {
         setStoragePath(path);
       } catch (e) {
         setStoragePath(t('common.loadError'));
-      }
-      try {
-        const p = await isPortableMode();
-        setPortable(!!p);
-      } catch (error) {
-        warnNonCriticalError('检查便携模式', error)
       }
     })();
   }, []);
@@ -238,13 +230,13 @@ function DataManagementSection() {
         </SettingItem>
 
         <SettingItem label={t('settings.dataManagement.changePath')} description={t('settings.dataManagement.changePathDesc')}>
-          <Button onClick={handleChangeStorageLocation} disabled={busy || portable} variant="primary" icon={<i className="ti ti-folder-plus"></i>}>
+          <Button onClick={handleChangeStorageLocation} disabled={busy} variant="primary" icon={<i className="ti ti-folder-plus"></i>}>
             {t('settings.dataManagement.selectNewPath')}
           </Button>
         </SettingItem>
 
         <SettingItem label={t('settings.dataManagement.resetPath')} description={t('settings.dataManagement.resetPathDesc')}>
-          <Button onClick={handleResetStorageLocation} disabled={busy || portable} variant="secondary" icon={<i className="ti ti-home"></i>}>
+          <Button onClick={handleResetStorageLocation} disabled={busy} variant="secondary" icon={<i className="ti ti-home"></i>}>
             {t('settings.dataManagement.resetPathButton')}
           </Button>
         </SettingItem>

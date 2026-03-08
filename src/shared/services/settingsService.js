@@ -1,35 +1,30 @@
 import {
   reloadSettings,
   saveSettings as saveSettingsApi,
-  getAppVersion as getAppVersionApi,
-  isPortableMode as isPortableModeApi
+  getAppVersion as getAppVersionApi
 } from '@shared/api'
 import { emit } from '@tauri-apps/api/event'
 import { toast } from '@shared/store/toastStore'
 import i18n from '@shared/i18n'
 
 export const defaultSettings = {
-  // 常规设置
   autoStart: false,
   runAsAdmin: false,
   startHidden: false,
   historyLimit: 100,
   language: 'zh-CN',
-  
-  // 外观设置
+
   theme: 'light',
   darkThemeStyle: 'classic',
   opacity: 0.9,
   clipboardAnimationEnabled: true,
   uiAnimationEnabled: true,
-  
-  // 快捷键设置
+
   toggleShortcut: 'Shift+Space',
   quickpasteShortcut: 'Ctrl+`',
   numberShortcuts: true,
   numberShortcutsModifier: 'Ctrl',
-  
-  // 剪贴板窗口快捷键
+
   navigateUpShortcut: 'ArrowUp',
   navigateDownShortcut: 'ArrowDown',
   tabLeftShortcut: 'ArrowLeft',
@@ -43,8 +38,7 @@ export const defaultSettings = {
   toggleClipboardMonitorShortcut: 'Ctrl+Shift+Z',
   togglePasteWithFormatShortcut: 'Ctrl+Shift+X',
   pastePlainTextShortcut: '',
-  
-  // 剪贴板设置
+
   clipboardMonitor: true,
   ignoreDuplicates: true,
   saveImages: true,
@@ -65,37 +59,30 @@ export const defaultSettings = {
   showBadges: true,
   showSourceIcon: true,
 
-  // 图片显示限制
   imageMaxSizeMb: 15,
   imageMaxWidth: 4096,
   imageMaxHeight: 4096,
-  
-  // 便捷粘贴设置
+
   quickpasteEnabled: true,
   quickpastePasteOnModifierRelease: false,
-  
-  // 鼠标设置
+
   mouseMiddleButtonEnabled: false,
   mouseMiddleButtonModifier: 'None',
   mouseMiddleButtonTrigger: 'short_press',
   mouseMiddleButtonLongPressMs: 300,
-  
-  // 应用过滤
+
   appFilterEnabled: false,
   appFilterMode: 'blacklist',
   appFilterList: [],
   appFilterEffect: 'clipboard_only',
-  
-  // 保存的窗口状态
+
   savedWindowPosition: null,
   savedWindowSize: null,
-  
-  // 数据存储设置
+
   customStoragePath: null,
   useCustomStorage: false
 }
 
-// 加载设置
 export async function loadSettingsFromBackend() {
   try {
     const savedSettings = await reloadSettings()
@@ -106,15 +93,13 @@ export async function loadSettingsFromBackend() {
   }
 }
 
-// 保存设置
 export async function saveSettingsToBackend(settings, options = {}) {
   const { showToast = true } = options
-  
+
   try {
     await saveSettingsApi(settings)
-    
     await emit('settings-changed', settings)
-    
+
     if (showToast) {
       toast.success(i18n.t('settings.saved'))
     }
@@ -128,25 +113,11 @@ export async function saveSettingsToBackend(settings, options = {}) {
   }
 }
 
-// 获取应用版本
 export async function getAppVersion() {
   try {
-    const versionInfo = await getAppVersionApi()
-    return versionInfo
+    return await getAppVersionApi()
   } catch (error) {
     console.error('获取版本信息失败:', error)
     return { version: '未知' }
   }
 }
-
-
-// 检查是否为便携版模式
-export async function isPortableMode() {
-  try {
-    return await isPortableModeApi()
-  } catch (error) {
-    console.error('检查便携版模式失败:', error)
-    return false
-  }
-}
-

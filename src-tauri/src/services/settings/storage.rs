@@ -1,29 +1,10 @@
 use super::model::AppSettings;
-use std::{env, fs, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 pub struct SettingsStorage;
 
 impl SettingsStorage {
-    fn is_portable_mode() -> bool {
-        if crate::services::is_portable_build() {
-            return true;
-        }
-        env::current_exe()
-            .ok()
-            .and_then(|exe| exe.parent().map(|p| p.join("portable.flag").exists() || p.join("portable.txt").exists()))
-            .unwrap_or(false)
-    }
-
     fn get_data_dir() -> Result<PathBuf, String> {
-        if Self::is_portable_mode() {
-            let exe_dir = env::current_exe()
-                .map_err(|e| e.to_string())?
-                .parent()
-                .ok_or("无法获取执行目录")?
-                .to_path_buf();
-            return Ok(exe_dir.join("data"));
-        }
-
         Ok(dirs::data_local_dir()
             .ok_or("无法获取数据目录")?
             .join("quickclipboard"))
@@ -37,7 +18,7 @@ impl SettingsStorage {
 
     pub fn load() -> Result<AppSettings, String> {
         let path = Self::get_settings_path()?;
-        
+
         if !path.exists() {
             return Ok(AppSettings::default());
         }
@@ -46,12 +27,12 @@ impl SettingsStorage {
             .map_err(|e| format!("读取设置文件失败 [{}]: {}", path.display(), e))?;
         let mut settings: AppSettings = serde_json::from_str(&content)
             .map_err(|e| format!("解析设置文件失败 [{}]: {}", path.display(), e))?;
-        
+
         if settings.number_shortcuts_modifier.contains("Alt") {
             settings.number_shortcuts_modifier = "Ctrl".to_string();
             let _ = Self::save(&settings);
         }
-        
+
         Ok(settings)
     }
 
@@ -63,7 +44,8 @@ impl SettingsStorage {
     pub fn save(settings: &AppSettings) -> Result<(), String> {
         let path = Self::get_settings_path()?;
         let content = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
-        fs::write(&path, content).map_err(|e| format!("写入设置文件失败 [{}]: {}", path.display(), e))
+        fs::write(&path, content)
+            .map_err(|e| format!("写入设置文件失败 [{}]: {}", path.display(), e))
     }
 
     pub fn get_data_directory(settings: &AppSettings) -> Result<PathBuf, String> {
@@ -74,7 +56,7 @@ impl SettingsStorage {
                 return Ok(custom_dir);
             }
         }
-        
+
         let dir = Self::get_data_dir()?;
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         Ok(dir)
